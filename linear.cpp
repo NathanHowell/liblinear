@@ -39,7 +39,7 @@ class l2_lr_fun : public function
 public:
 	l2_lr_fun(const problem *prob, double Cp, double Cn);
 	~l2_lr_fun();
-	
+
 	double fun(double *w);
 	void grad(double *w, double *g);
 	void Hv(double *s, double *Hs);
@@ -96,11 +96,11 @@ double l2_lr_fun::fun(double *w)
 	Xv(w, z);
 	for(i=0;i<l;i++)
 	{
-	        double yz = y[i]*z[i];
+		double yz = y[i]*z[i];
 		if (yz >= 0)
-		        f += C[i]*log(1 + exp(-yz));
+			f += C[i]*log(1 + exp(-yz));
 		else
-		        f += C[i]*(-yz+log(1 + exp(yz)));
+			f += C[i]*(-yz+log(1 + exp(yz)));
 	}
 	f = 2*f;
 	for(i=0;i<n;i++)
@@ -194,7 +194,7 @@ class l2loss_svm_fun : public function
 public:
 	l2loss_svm_fun(const problem *prob, double Cp, double Cn);
 	~l2loss_svm_fun();
-	
+
 	double fun(double *w);
 	void grad(double *w, double *g);
 	void Hv(double *s, double *Hs);
@@ -255,7 +255,7 @@ double l2loss_svm_fun::fun(double *w)
 	Xv(w, z);
 	for(i=0;i<l;i++)
 	{
-	        z[i] = y[i]*z[i];
+		z[i] = y[i]*z[i];
 		double d = z[i]-1;
 		if (d < 0)
 			f += C[i]*d*d;
@@ -418,7 +418,7 @@ static void solve_linear_c_svc(
 		diag_p = 0; diag_n = 0;
 		upper_bound_p = Cp; upper_bound_n = Cn;
 	}
-	
+
 	for(i=0; i<n; i++)
 		w[i] = 0;
 	for(i=0; i<l; i++)
@@ -455,7 +455,7 @@ static void solve_linear_c_svc(
 			swap(index[i], index[j]);
 		}
 
-		for (s=0; s < active_size; s++)
+		for (s=0;s<active_size;s++)
 		{
 			i = index[s];
 			G = 0;
@@ -481,7 +481,7 @@ static void solve_linear_c_svc(
 			}
 
 			PG = 0;
-			if (alpha[i] ==0)
+			if(alpha[i] == 0)
 			{
 				if (G > PGmax_old)
 				{
@@ -574,7 +574,7 @@ static void solve_linear_c_svc(
 	}
 	info("Objective value = %lf\n",v/2);
 	info("nSV = %d\n",nSV);
-	
+
 	delete [] QD;
 	delete [] alpha;
 	delete [] y;
@@ -645,8 +645,8 @@ void train_one(const problem *prob, const parameter *param, double *w, double Cp
 	double eps=param->eps;
 	int pos = 0;
 	int neg = 0;
-	for (int i=0; i<prob->l;i++)
-		if (prob->y[i]==+1)
+	for(int i=0;i<prob->l;i++)
+		if(prob->y[i]==+1)
 			pos++;
 	neg = prob->l - pos;
 

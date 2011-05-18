@@ -114,7 +114,7 @@ nr_feature, bias, Label, w]:
         -bias: If >= 0, we assume one additional feature is added to the end
             of each data instance.
         -Label: label of each class
-        -w: a n-by-nr_classifier matrix for the weights, where n is nr_feature
+        -w: a nr_classifier-by-n matrix for the weights, where n is nr_feature
             or nr_feature+1 depending on the existence of the bias term.
             nr_classifier is the number of trained classifiers.
             It is 1 if nr_class=2, and is nr_class otherwise.
