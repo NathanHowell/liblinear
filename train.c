@@ -104,8 +104,12 @@ int main(int argc, char **argv)
 	else
 	{
 		model_=train(&prob, &param);
-		save_model(model_file_name, model_);
-		destroy_model(model_);
+		if(save_model(model_file_name, model_))
+		{
+			fprintf(stderr,"can't save model to file %s\n",model_file_name);
+			exit(1);
+		}
+		free_and_destroy_model(&model_);
 	}
 	destroy_param(&param);
 	free(prob.y);
@@ -135,6 +139,7 @@ void do_cross_validation()
 void parse_command_line(int argc, char **argv, char *input_file_name, char *model_file_name)
 {
 	int i;
+	void (*print_func)(const char*) = NULL;	// default printing to stdout
 
 	// default values
 	param.solver_type = L2R_L2LOSS_SVC_DUAL;
@@ -189,7 +194,7 @@ void parse_command_line(int argc, char **argv, char *input_file_name, char *mode
 				break;
 
 			case 'q':
-				liblinear_print_string = &print_null;
+				print_func = &print_null;
 				i--;
 				break;
 
@@ -199,6 +204,8 @@ void parse_command_line(int argc, char **argv, char *input_file_name, char *mode
 				break;
 		}
 	}
+
+	set_print_string_function(print_func);
 
 	// determine filenames
 	if(i>=argc)
@@ -260,7 +267,7 @@ void read_problem(const char *filename)
 				break;
 			elements++;
 		}
-		elements++;
+		elements++; // for bias term
 		prob.l++;
 	}
 	rewind(fp);
