@@ -3,7 +3,6 @@
 #include <stdlib.h>
 #include <string.h>
 #include <stdarg.h>
-#include <time.h>
 #include "linear.h"
 #include "tron.h"
 typedef signed char schar;
@@ -367,23 +366,22 @@ void l2loss_svm_fun::subXTv(double *v, double *XTv)
 }
 
 // A coordinate descent algorithm for 
-// solving L1 loss and L2 loss SVM dual optimization problems
-// Solves:
+// L1-loss and L2-loss SVM dual problems
 //
 //  min_\alpha  0.5(\alpha^T (Q + D)\alpha) - e^T \alpha,
 //    s.t.      0 <= alpha_i <= upper_bound_i,
 // 
-//  where Q is y^TX^TXy and
-//  D is a diagonal matrix with D_ii = 1/diag_i
+//  where Qij = yi yj xi^T xj and
+//  D is a diagonal matrix 
 //
 // In L1-SVM case:
 // 		upper_bound_i = Cp if y_i = 1
-// 		upper_bound_i = Cn if y_i = -1		
-// 		diag_i = INF
+// 		upper_bound_i = Cn if y_i = -1
+// 		D_ii = 0
 // In L2-Svm case:
 // 		upper_bound_i = INF
-// 		diag_i = 2*Cp	if y_i = 1
-// 		diag_i = 2*Cn	if y_i = -1
+// 		D_ii = 1/(2*Cp)	if y_i = 1
+// 		D_ii = 1/(2*Cn)	if y_i = -1
 //
 // Given: 
 // x, y, Cp, Cn
@@ -397,27 +395,30 @@ static void solve_linear_c_svc(
 {
 	int l = prob->l;
 	int n = prob->n;
-	int i, iter = 0;
-	double C, d;
+	int i, s, iter = 0;
+	double C, d, G;
 	double *QD = new double[l];
-	double *G = new double[l];
-	int max_iter = 2000;
+	int max_iter = 20000;
 	int *index = new int[l];
-	double error_i, error;
 	double *alpha = new double[l];
 	schar *y = new schar[l];
 	int active_size = l;
 
+	// PG: projected gradient, for shrinking and stopping
+	double PG;
+	double PGmax_old = INF;
+	double PGmin_old = -INF;
+	double PGmax_new, PGmin_new;
+
 	// default solver_type: L2LOSS_SVM_DUAL
-	double diag_p = 2*Cp, diag_n = 2*Cn;
+	double diag_p = 0.5/Cp, diag_n = 0.5/Cn;
 	double upper_bound_p = INF, upper_bound_n = INF;
 	if(solver_type == L1LOSS_SVM_DUAL)
 	{
-		diag_p = INF, diag_n = INF;
-		upper_bound_p = Cp, upper_bound_n = Cn;
+		diag_p = 0; diag_n = 0;
+		upper_bound_p = Cp; upper_bound_n = Cn;
 	}
 	
-
 	for(i=0; i<n; i++)
 		w[i] = 0;
 	for(i=0; i<l; i++)
@@ -426,12 +427,12 @@ static void solve_linear_c_svc(
 		if(prob->y[i] > 0)
 		{
 			y[i] = +1; 
-			QD[i] = 1/diag_p;
+			QD[i] = diag_p;
 		}
 		else
 		{
 			y[i] = -1;
-			QD[i] = 1/diag_n;
+			QD[i] = diag_n;
 		}
 
 		feature_node *xi = prob->x[i];
@@ -445,45 +446,83 @@ static void solve_linear_c_svc(
 
 	while (iter < max_iter)
 	{
-		error = -INF;
+		PGmax_new = 0;
+		PGmin_new = 0;
+
 		for (i=0; i<active_size; i++)
 		{
 			int j = i+rand()%(active_size-i);
 			swap(index[i], index[j]);
 		}
 
-		for(int k=0; k<active_size; k++)
+		for (s=0; s < active_size; s++)
 		{
-			i = index[k];
-			G[i] = 0;
+			i = index[s];
+			G = 0;
 			schar yi = y[i];
 
 			feature_node *xi = prob->x[i];
 			while(xi->index!= -1)
 			{
-				G[i] += w[xi->index-1]*(xi->value);
+				G += w[xi->index-1]*(xi->value);
 				xi++;
 			}
-			G[i] = G[i]*yi-1;
+			G = G*yi-1;
 
 			if(yi == 1)
 			{
 				C = upper_bound_p; 
-				G[i] += alpha[i]/diag_p; 
+				G += alpha[i]*diag_p; 
 			}
 			else 
 			{
 				C = upper_bound_n;
-				G[i] += alpha[i]/diag_n; 
+				G += alpha[i]*diag_n; 
 			}
-			error_i = fabs(min(max(alpha[i] - G[i], 0.0), C) - alpha[i]);
-			error = max(error_i, error);
-			if(error_i <= 1.0e-12)
-				continue;
+
+			PG = 0;
+			if (alpha[i] ==0)
+			{
+				if (G > PGmax_old)
+				{
+					active_size--;
+					swap(index[s], index[active_size]);
+					s--;
+					continue;
+				}
+				else if (G < 0)
+				{
+					PG = G;
+					PGmin_new = min(PGmin_new, PG);
+				}
+			}
+			else if (alpha[i] == C)
+			{
+				if (G < PGmin_old)
+				{
+					active_size--;
+					swap(index[s], index[active_size]);
+					s--;
+					continue;
+				}
+				else if (G > 0)
+				{
+					PG = G;
+					PGmax_new = max(PGmax_new, PG);
+				}
+			}
 			else
 			{
+				PG = G;
+				PGmax_new = max(PGmax_new, PG);
+				PGmin_new = min(PGmin_new, PG);
+
+			}
+
+			if(fabs(PG) > 1.0e-12)
+			{
 				double alpha_old = alpha[i];
-				alpha[i] = min(max(alpha[i] - G[i]/QD[i], 0.0), C);
+				alpha[i] = min(max(alpha[i] - G/QD[i], 0.0), C);
 				d = (alpha[i] - alpha_old)*yi;
 				xi = prob->x[i];
 				while (xi->index != -1)
@@ -494,7 +533,14 @@ static void solve_linear_c_svc(
 			}
 		}
 
-		if(error <= eps)
+		iter++;
+		if(iter % 10 == 0)
+		{
+			info("."); 
+			info_flush();
+		}
+
+		if(PGmax_new - PGmin_new <= eps)
 		{
 			if(active_size == l)
 				break;
@@ -502,35 +548,17 @@ static void solve_linear_c_svc(
 			{
 				active_size = l;
 				info("*"); info_flush();
+				PGmax_old = INF;
+				PGmin_old = -INF;
 				continue;
 			}
 		}
-
-
-		iter++;
-
-		// shrinking
-		if(iter % 5 == 0)
-		{
-			info("."); info_flush();
-
-			for(int k = 0; k < active_size; k++)
-			{
-				i = index[k];
-				if(y[i] == 1) C = upper_bound_p; else C = upper_bound_n;
-
-				if(alpha[i] == 0 && G[i] > -100*eps)
-				{
-					active_size--;
-					swap(index[k], index[active_size]);
-				}
-				else if( alpha[i] == C && G[i] < 100*eps)
-				{
-					active_size--;
-					swap(index[k], index[active_size]);
-				}
-			}
-		}
+		PGmax_old = PGmax_new;
+		PGmin_old = PGmin_new;
+		if (PGmax_old == 0)
+			PGmax_old = INF;
+		if (PGmin_old == 0)
+			PGmin_old = -INF;
 	}
 
 	info("\noptimization finished, #iter = %d\n",iter);
@@ -538,25 +566,23 @@ static void solve_linear_c_svc(
 		info("Warning: reaching max number of iterations\n");
 
 	// calculate objective value
-	
+
 	double v = 0;
-	for(int i=0; i<l; i++)
+	int nSV = 0;
+	for(i=0; i<n; i++)
+		v += w[i]*w[i];
+	for(i=0; i<l; i++)
 	{
-		G[i] = 0;
-		schar yi = y[i];
-		feature_node *xi = prob->x[i];
-		while(xi->index != -1)
-		{
-			G[i] += w[xi->index-1]*(xi->value);
-			xi++;
-		}
-		G[i] = G[i]*yi;
-		if(yi == 1) G[i] += alpha[i]/diag_p; else G[i] += alpha[i]/diag_n;
-		v += alpha[i] * (G[i]-2);
+		if (y[i] == 1)
+			v += alpha[i]*(alpha[i]*diag_p - 2); 
+		else
+			v += alpha[i]*(alpha[i]*diag_n - 2);
+		if(alpha[i] > 0)
+			++nSV;
 	}
 	info("Objective value = %lf\n",v/2);
+	info("nSV = %d\n",nSV);
 	
-	delete [] G;
 	delete [] QD;
 	delete [] alpha;
 	delete [] y;

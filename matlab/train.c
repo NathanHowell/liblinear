@@ -86,6 +86,7 @@ int parse_command_line(int nrhs, const mxArray *prhs[], char *model_file_name)
 	param.weight_label = NULL;
 	param.weight = NULL;
 	cross_validation_flag = 0;
+	col_format_flag = 0;
 
 	if(nrhs <= 1)
 		return 1;
@@ -257,8 +258,6 @@ void mexFunction( int nlhs, mxArray *plhs[],
 	// (for cross validation and probability estimation)
 	srand(1);
 
-	col_format_flag = 0;
-
 	// Transform the input Matrix to libsvm format
 	if(nrhs > 0 && nrhs < 5)
 	{
@@ -274,7 +273,12 @@ void mexFunction( int nlhs, mxArray *plhs[],
 		if(mxIsSparse(prhs[1]))
 			err = read_problem_sparse(prhs[0], prhs[1]);
 		else
+		{
 			mexPrintf("Training_instance_matrix must be sparse\n");
+			destroy_param(&param);
+			fake_answer(plhs);
+			return;
+		}
 
 		// train's original code
 		error_msg = check_parameter(&prob, &param);
