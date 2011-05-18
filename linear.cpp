@@ -260,8 +260,8 @@ double l2loss_svm_fun::fun(double *w)
 	for(i=0;i<l;i++)
 	{
 		z[i] = y[i]*z[i];
-		double d = z[i]-1;
-		if (d < 0)
+		double d = 1-z[i];
+		if (d > 0)
 			f += C[i]*d*d;
 	}
 	f = 2*f;

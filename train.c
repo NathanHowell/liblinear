@@ -13,7 +13,7 @@ void exit_with_help()
 	"Usage: train [options] training_set_file [model_file]\n"
 	"options:\n"
 	"-s type : set type of solver (default 1)\n"
-	"	0 -- L2 logistic regression\n"
+	"	0 -- L2-regularized logistic regression\n"
 	"	1 -- L2-loss support vector machines (dual)\n"	
 	"	2 -- L2-loss support vector machines (primal)\n"
 	"	3 -- L1-loss support vector machines (dual)\n"
