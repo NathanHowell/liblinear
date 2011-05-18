@@ -1,0 +1,24 @@
+#You must ensure nmake.exe, cl.exe, link.exe are in system path.
+#VCVARS32.bat
+#Under dosbox prompt
+#nmake -f Makefile.win
+
+##########################################
+CXXC = cl.exe
+CFLAGS = -nologo -O2 -EHsc -I. -D __WIN32__ -D _CRT_SECURE_NO_DEPRECATE
+TARGET = windows
+
+all: $(TARGET)\lrtrain.exe $(TARGET)\lrpredict.exe
+
+$(TARGET)\lrtrain.exe: lr.obj lr-train.c blas\*.c
+	$(CXX) $(CFLAGS) -Fe$(TARGET)\lrtrain.exe lr.obj lr-train.c blas\*.c
+
+$(TARGET)\lrpredict.exe: lr.obj lr-predict.c blas\*.c
+	$(CXX) $(CFLAGS) -Fe$(TARGET)\lrpredict.exe lr.obj lr-predict.c blas\*.c
+
+lr.obj: lr.cpp lr.h
+    $(CXXC) $(CFLAGS) -c lr.cpp
+
+clean:
+    -erase /Q *.obj $(TARGET)\.
+

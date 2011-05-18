@@ -1,0 +1,259 @@
+Liblr is a simple package for solving large-scale regularized logistic regression
+by trust region Newton's Method. This document explains the usage of liblr.
+
+Table of Contents
+=================
+
+- When to use LIBLR but not LIBSVM
+- Quick Start
+- Installation
+- `lr-train' Usage
+- `lr-predict' Usage
+- Examples
+- Library Usage
+- Building Windows Binaries
+- Additional Information
+- MATLAB interface
+
+When to use LIBLR but not LIBSVM
+================================
+
+There are some large data for which with/without nonlinear mappings
+gives similar performances.  Without using kernels, one can train a
+much larger set via a linear classifier.  Document classification is
+one such application.
+
+For the software LIBSVM, please check
+http://www.csie.ntu.edu.tw/~cjlin/libsvm
+
+
+Quick Start
+===========
+
+See the section ``Installation'' for installing liblr.
+
+After installation, there are programs `lr-train' and `lr-predict' for
+training and testing, respectively.
+
+About the data format, please check the README file of libsvm.
+
+A sample classification data included in this package is `heart_scale'.
+
+Type `lr-train heart_scale', and the program will read the training
+data and output the model file `heart_scale.model'. If you have a test
+set called heart_scale.t, then type `lr-predict heart_scale.t
+heart_scale.model output' to see the prediction accuracy. The `output'
+file contains the predicted class labels.
+
+For more information about `lr-train' and `lr-predict', see the sections
+`lr-train' Usage and `lr-predict' Usage.
+
+To obtain good performances, sometimes one needs to scale the
+data. Please check the program `svm-scale' of LIBSVM. For large and
+sparse data, use `-l 0' to keep the sparsity.
+
+Installation
+============
+
+On Unix systems, type `make' to build the `lr-train' and `lr-predict'
+programs. Run them without arguments to show the usages.
+
+On other systems, consult `Makefile' to build them (e.g., see
+'Building Windows binaries' in this file) or use the pre-built
+binaries (Windows binaries are in the directory `windows').
+
+This software uses some level-1 BLAS subroutines. The needed functions are 
+included in this package.  If a BLAS library is available on your
+machine, you may use it by modifying the Makefile: Unmark the following like
+
+	#LIBS = -lblas
+
+and mark 
+
+	LIBS = blas/blas.a
+
+`lr-train' Usage
+================
+
+Usage: lr-train [options] training_set_file [model_file]
+options:
+-c cost : set the parameter C (default 1)
+-e epsilon : set tolerance of termination criterion (default 0.1)
+-B bias : set bias (default 1) so instance x becomes [x; bias]
+-wi weight: set the parameter C of class i
+-v n: n-fold cross validation mode
+
+`lr-predict' Usage
+==================
+
+Usage: lr-predict [options] test_file model_file output_file
+options:
+-b probability_estimates: whether to predict probability estimates, 0 or 1 (default 0)
+
+Examples
+========
+
+> lr-train data_file
+
+Do training and obtain a model file.
+
+> lr-train -v 5 data_file
+
+Do five-fold cross-validation
+
+> lr-predict -b 1 test_file data_file.model output_file
+
+Predict test data with probability estimates
+
+Library Usage
+=============
+
+- Function: lr_model* lr_train(const struct lr_problem *lrprob,
+                const struct lr_parameter *param);
+
+    This function constructs and returns a logistic regression model
+    according to the given training data and parameters.
+
+    struct lr_problem describes the problem:
+
+        struct lr_problem
+        {
+            int l, n;
+            int *y;
+            struct lr_node **x;
+            double bias;
+        };
+
+    where `l' is the number of training data. If bias >= 0, we assume
+    that one additional feature is added to the end of each data
+    instance. `n' is the number of feature (including the bias feature
+    if bias >= 0). `y' is an array containing the target values. And
+    `x' is an array of pointers,
+    each of which points to a sparse representation (array of lr_node) of one
+    training vector.
+
+    For example, if we have the following training data:
+
+    LABEL       ATTR1   ATTR2   ATTR3   ATTR4   ATTR5
+    -----       -----   -----   -----   -----   -----
+    1           0       0.1     0.2     0       0
+    2           0       0.1     0.3    -1.2     0
+    1           0.4     0       0       0       0
+    2           0       0.1     0       1.4     0.5
+    3          -0.1    -0.2     0.1     1.1     0.1
+
+    and bias = 1, then the components of lr_problem are:
+
+    l = 5
+    n = 6
+
+    y -> 1 2 1 2 3
+
+    x -> [ ] -> (2,0.1) (3,0.2) (6,1) (-1,?)
+         [ ] -> (2,0.1) (3,0.3) (4,-1.2) (6,1) (-1,?)
+         [ ] -> (1,0.4) (6,1) (-1,?)
+         [ ] -> (2,0.1) (4,1.4) (5,0.5) (6,1) (-1,?)
+         [ ] -> (1,-0.1) (2,-0.2) (3,0.1) (4,1.1) (5,0.1) (6,1) (-1,?)
+
+- Function: void lr_cross_validation(const lr_problem *prob, const lr_parameter *param, int nr_fold, double *target);
+
+    This function conducts cross validation. Data are separated to
+    nr_fold folds. Under given parameters, sequentially each fold is
+    validated using the model from training the remaining. Predicted
+    labels in the validation process are stored in the array called
+    target.
+
+    The format of lr_prob is same as that for lr_train().
+
+- Function: double lr_predict(const lr_model *model, const lr_node *x);
+
+    This functions classifies a test vector using the given
+    model. The predicted label is returned.
+
+- Function: double lr_predict_probability(const struct lr_model *model,
+            const struct lr_node *x, double* prob_estimates);
+
+    This function gives nr_class probability estimates in the array
+    prob_estimates. nr_class can be obtained from the function
+    lr_get_nr_class. The class with the highest probability is
+    returned.
+
+    We use one-vs-the rest multi-class strategy.
+
+- Function: int lr_get_nr_feature(const lr_model *model);
+
+    The function gives the number of attributes of the model.
+
+- Function: int lr_get_nr_class(const lr_model *model);
+
+    The function gives the number of classes of the model.
+
+- Function: void lr_get_labels(const lr_model *model, int* label);
+
+    This function outputs the name of labels into an array called label.
+
+- Function: const char *lr_check_parameter(const struct lr_problem *prob,
+            const struct lr_parameter *param);
+
+    This function checks whether the parameters are within the feasible
+    range of the problem. This function should be called before calling
+    lr_train() and lr_cross_validation(). It returns NULL if the
+    parameters are feasible, otherwise an error message is returned.
+	
+- Function: int lr_save_model(const char *model_file_name,
+            const struct lr_model *model);
+
+    This function saves a model to a file; returns 0 on success, or -1
+    if an error occurs.
+
+- Function: struct lr_model *lr_load_model(const char *model_file_name);
+
+    This function returns a pointer to the model read from the file,
+    or a null pointer if the model could not be loaded.
+
+- Function: void lr_destroy_model(struct lr_model *model);
+
+    This function frees the memory used by a model.
+
+- Function: void lr_destroy_param(struct lr_parameter *param);
+
+    This function frees the memory used by a parameter set.
+
+Building Windows Binaries
+=========================
+
+Windows binaries are in the directory `windows'. To build them via
+Visual C++, use the following steps:
+
+1. Open a dos command box and change to liblr directory. If
+environment variables of VC++ have not been set, type
+
+"C:\Program Files\Microsoft Visual Studio .NET 2003\Vc7\bin\vcvars32.bat"
+
+You may have to modify the above according which version of VC++ or
+where it is installed.
+
+2. Type
+
+nmake -f Makefile.win clean all
+
+
+MATLAB Interface
+================
+
+Please check the file README in the directory `matlab'.
+
+Additional Information
+======================
+
+If you find LIBLR helpful, please cite it as
+
+C.-J. Lin, R. C. Weng, and S. S. Keerthi.
+Trust region Newton method for large-scale regularized logistic
+regression. Technical report, 2007. A short version appears
+in ICML 2007. Software available at http://www.csie.ntu.edu.tw/~cjlin/liblr
+
+For any questions and comments, please send your email to
+cjlin@csie.ntu.edu.tw
+
+

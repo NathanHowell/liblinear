@@ -1,0 +1,156 @@
+#include <stdlib.h>
+#include <string.h>
+#include "lr.h"
+
+#include "mex.h"
+
+#if MX_API_VER < 0x07030000
+typedef int mwIndex;
+#endif
+
+#define Malloc(type,n) (type *)malloc((n)*sizeof(type))
+
+#define NUM_OF_RETURN_FIELD 5
+
+static const char *field_names[] = {
+	"nr_class",
+	"nr_feature",
+	"bias",
+	"Label",
+	"w",
+};
+
+const char *model_to_matlab_structure(mxArray *plhs[], int num_of_feature, struct lr_model *model)
+{
+	int i, j;
+	int nr_classifier;
+	double *ptr;
+	mxArray *return_model, **rhs;
+	int out_id = 0;
+	int n;
+	double bias;
+
+	rhs = (mxArray **)mxMalloc(sizeof(mxArray *)*NUM_OF_RETURN_FIELD);
+
+	// nr_class
+	rhs[out_id] = mxCreateDoubleMatrix(1, 1, mxREAL);
+	ptr = mxGetPr(rhs[out_id]);
+	ptr[0] = model->nr_class;
+	out_id++;
+
+	if(model->nr_class==2)
+		nr_classifier=1;
+	else
+		nr_classifier=model->nr_class;
+
+	// nr_feature
+	rhs[out_id] = mxCreateDoubleMatrix(1, 1, mxREAL);
+	ptr = mxGetPr(rhs[out_id]);
+	ptr[0] = model->nr_feature;
+	out_id++;
+
+	// bias
+	rhs[out_id] = mxCreateDoubleMatrix(1, 1, mxREAL);
+	ptr = mxGetPr(rhs[out_id]);
+	ptr[0] = model->bias;
+	out_id++;
+
+	if(model->bias>=0)
+		n=model->nr_feature+1;
+	else
+		n=model->nr_feature;
+
+	// Label
+	if(model->label)
+	{
+		rhs[out_id] = mxCreateDoubleMatrix(model->nr_class, 1, mxREAL);
+		ptr = mxGetPr(rhs[out_id]);
+		for(i = 0; i < model->nr_class; i++)
+			ptr[i] = model->label[i];
+	}
+	else
+		rhs[out_id] = mxCreateDoubleMatrix(0, 0, mxREAL);
+	out_id++;
+
+	// w
+	rhs[out_id] = mxCreateDoubleMatrix(n, nr_classifier, mxREAL);
+	ptr = mxGetPr(rhs[out_id]);
+	for(i=0, j=n*nr_classifier; i<j; i++)
+		ptr[i]=model->w[i];
+	out_id++;
+
+	/* Create a struct matrix contains NUM_OF_RETURN_FIELD fields */
+	return_model = mxCreateStructMatrix(1, 1, NUM_OF_RETURN_FIELD, field_names);
+
+	/* Fill struct matrix with input arguments */
+	for(i = 0; i < NUM_OF_RETURN_FIELD; i++)
+		mxSetField(return_model,0,field_names[i],mxDuplicateArray(rhs[i]));
+	/* return */
+	plhs[0] = return_model;
+	mxFree(rhs);
+
+	return NULL;
+}
+
+const char *matlab_matrix_to_model(struct lr_model *model, const mxArray *matlab_struct)
+{
+	int i, j, num_of_fields;
+	int nr_classifier;
+	double *ptr;
+	int id = 0;
+	int n;
+	mxArray **rhs;
+
+	num_of_fields = mxGetNumberOfFields(matlab_struct);
+	rhs = (mxArray **) mxMalloc(sizeof(mxArray *)*num_of_fields);
+
+	for(i=0;i<num_of_fields;i++)
+		rhs[i] = mxGetFieldByNumber(matlab_struct, 0, i);
+
+	model->nr_class=0;
+	nr_classifier=0;
+	model->nr_feature=0;
+	model->w=NULL;
+	model->label=NULL;
+
+	// nr_class
+	ptr = mxGetPr(rhs[id]);
+	model->nr_class = (int)ptr[0];
+	id++;
+
+	if(model->nr_class==2)
+		nr_classifier=1;
+	else
+		nr_classifier=model->nr_class;
+
+	// nr_feature
+	ptr = mxGetPr(rhs[id]);
+	model->nr_feature = (int)ptr[0];
+	id++;
+
+	// bias
+	ptr = mxGetPr(rhs[id]);
+	model->bias = (int)ptr[0];
+	id++;
+
+	if(model->bias>=0)
+		n=model->nr_feature+1;
+	else
+		n=model->nr_feature;
+
+	ptr = mxGetPr(rhs[id]);
+	model->label=Malloc(int, model->nr_class);
+	for(i=0; i<model->nr_class; i++)
+		model->label[i]=(int)ptr[i];
+	id++;
+
+	ptr = mxGetPr(rhs[id]);
+	model->w=Malloc(double, nr_classifier*n);
+	for(i=0, j=nr_classifier*n; i<j; i++)
+		model->w[i]=ptr[i];
+	id++;
+	mxFree(rhs);
+
+	return NULL;
+}
+
