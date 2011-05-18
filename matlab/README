@@ -17,18 +17,19 @@ Table of Contents
 Introduction
 ============
 
-This tool provides a simple interface to LIBLINEAR, a library for large-scale
-regularized linear classification (http://www.csie.ntu.edu.tw/~cjlin/liblinear).
-It is very easy to use as the usage and the way of specifying parameters
-are the same as that of LIBLINEAR.
+This tool provides a simple interface to LIBLINEAR, a library for
+large-scale regularized linear classification
+(http://www.csie.ntu.edu.tw/~cjlin/liblinear).  It is very easy to use
+as the usage and the way of specifying parameters are the same as that
+of LIBLINEAR.
 
 Installation
 ============
 
-On Unix systems, we recommend using GNU g++ (version < 3.4) as your
-compiler and type 'make' to build 'train.mexglx' and 'predict.mexglx'.
-Note that we assume your MATLAB is installed in '/usr/local/matlab',
-if not, please change MATLABDIR in Makefile.
+On Unix systems, we recommend using GNU g++ as your compiler and type
+'make' to build 'train.mexglx' and 'predict.mexglx'.  Note that we
+assume your MATLAB is installed in '/usr/local/matlab', if not, please
+change MATLABDIR in Makefile.
 
 Example:
         linux> make
@@ -63,28 +64,32 @@ http://www.mathworks.com/support/tech-notes/1600/1601.html
 Usage
 =====
 
-matlab> model = train(training_label_vector, training_instance_matrix [,'liblinear_options']);
+matlab> model = train(training_label_vector, training_instance_matrix [,'liblinear_options', 'col']);
 
         -training_label_vector:
             An m by 1 vector of training labels.
         -training_instance_matrix:
             An m by n matrix of m training instances with n features.
-            It can be dense or sparse.
+            It must be a sparse matrix.
         -liblinear_options:
             A string of training options in the same format as that of LIBLINEAR.
+        -col:
+	    if 'col' is set, each column of training_instance_matrix is a data instance. Otherwise each row is a data instance.
 
-matlab> [predicted_label, accuracy, decision_values/prob_estimates] = predict(testing_label_vector, testing_instance_matrix, model [, 'liblinear_options']);
+matlab> [predicted_label, accuracy, decision_values/prob_estimates] = predict(testing_label_vector, testing_instance_matrix, model [, 'liblinear_options', 'col']);
 
         -testing_label_vector:
             An m by 1 vector of prediction labels. If labels of test
             data are unknown, simply use any random values.
         -testing_instance_matrix:
             An m by n matrix of m testing instances with n features.
-            It can be dense or sparse.
+            It must be a sparse matrix.
         -model:
             The output of train.
         -liblinear_options:
             A string of testing options in the same format as that of LIBLINEAR.
+        -col:
+	    if 'col' is set, each column of testing_instance_matrix is a data instance. Otherwise each row is a data instance.
 
 Returned Model Structure
 ========================
@@ -150,8 +155,7 @@ LIBSVM by Rong-En Fan from National Taiwan University.
 Additional Information
 ======================
 
-This interface was written by Xiang-Rui Wang from Department of Computer Science,
-National Taiwan University.  Please cite LIBLINEAR as follows
+Please cite LIBLINEAR as follows
 
 C.-J. Lin, R. C. Weng, and S. S. Keerthi.
 Trust region Newton method for large-scale regularized logistic

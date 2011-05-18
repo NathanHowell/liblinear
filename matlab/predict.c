@@ -14,6 +14,8 @@ typedef int mwIndex;
 
 #define Malloc(type,n) (type *)malloc((n)*sizeof(type))
 
+int col_format_flag;
+
 void read_sparse_instance(const mxArray *prhs, int index, struct feature_node *x, int feature_number, double bias)
 {
 	int i, j, low, high;
@@ -32,7 +34,7 @@ void read_sparse_instance(const mxArray *prhs, int index, struct feature_node *x
 		x[j].index = ir[i]+1;
 		x[j].value = samples[i];
 		j++;
- 	}
+	}
 	x[j].index = feature_number+1;
 	x[j].value = bias;
 	j++;
@@ -54,7 +56,7 @@ void do_predict(mxArray *plhs[], const mxArray *prhs[], struct model *model_, co
 	double *ptr_instance, *ptr_label, *ptr_predict_label;
 	double *ptr_prob_estimates, *ptr_dec_values, *ptr;
 	struct feature_node *x;
-	mxArray *pplhs[1]; // transposed instance sparse matrix
+	mxArray *pplhs[1]; // instance sparse matrix in row format
 
 	int correct = 0;
 	int total = 0;
@@ -71,12 +73,18 @@ void do_predict(mxArray *plhs[], const mxArray *prhs[], struct model *model_, co
 	// prhs[1] = testing instance matrix
 	feature_number = mxGetN(prhs[1]);
 	testing_instance_number = mxGetM(prhs[1]);
+	if(col_format_flag)
+	{
+		feature_number = mxGetM(prhs[1]);
+		testing_instance_number = mxGetN(prhs[1]);
+	}
+
 	label_vector_row_num = mxGetM(prhs[0]);
 	label_vector_col_num = mxGetN(prhs[0]);
 
 	if(label_vector_row_num!=testing_instance_number)
 	{
-		mexPrintf("# of labels (# of column in 1st argument) does not match # of instances (# of rows in 2nd argument).\n");
+		mexPrintf("# of labels (# of rows in 1st argument) does not match # of instances (# of rows in 2nd argument).\n");
 		fake_answer(plhs);
 		return;
 	}
@@ -93,15 +101,25 @@ void do_predict(mxArray *plhs[], const mxArray *prhs[], struct model *model_, co
 	// transpose instance matrix
 	if(mxIsSparse(prhs[1]))
 	{
-		mxArray *pprhs[1];
-		pprhs[0] = mxDuplicateArray(prhs[1]);
-		if(mexCallMATLAB(1, pplhs, 1, pprhs, "transpose"))
+		if(col_format_flag)
 		{
-			mexPrintf("Error: cannot transpose testing instance matrix\n");
-			fake_answer(plhs);
-			return;
+			pplhs[0] = (mxArray *)prhs[1];
+		}
+		else
+		{
+			mxArray *pprhs[1];
+			pprhs[0] = mxDuplicateArray(prhs[1]);
+			if(mexCallMATLAB(1, pplhs, 1, pprhs, "transpose"))
+			{
+				mexPrintf("Error: cannot transpose testing instance matrix\n");
+				fake_answer(plhs);
+				return;
+			}
 		}
 	}
+	else
+		mexPrintf("Testing_instance_matrix must be sparse\n");
+
 
 	prob_estimates = Malloc(double, nr_class);
 
@@ -122,21 +140,8 @@ void do_predict(mxArray *plhs[], const mxArray *prhs[], struct model *model_, co
 
 		target = ptr_label[instance_index];
 
-		if(mxIsSparse(prhs[1])) // prhs[1]^T is still sparse
-		{
-			read_sparse_instance(pplhs[0], instance_index, x, feature_number, model_->bias);
-		}
-		else
-		{
-			for(i=0;i<feature_number;i++)
-			{
-				x[i].index = i;
-				x[i].value = ptr_instance[testing_instance_number*i+instance_index];
-			}
-			x[feature_number].index = feature_number;
-			x[feature_number].value = 1;
-			x[feature_number+1].index = -1;
-		}
+		// prhs[1] and prhs[1]^T are sparse
+		read_sparse_instance(pplhs[0], instance_index, x, feature_number, model_->bias);
 
 		if(predict_probability_flag)
 		{
@@ -175,23 +180,35 @@ void do_predict(mxArray *plhs[], const mxArray *prhs[], struct model *model_, co
 void exit_with_help()
 {
 	mexPrintf(
-	"Usage: [predicted_label, accuracy, decision_values/prob_estimates] = predict(testing_label_vector, testing_instance_matrix, model, 'liblinear_options')\n"
-	"liblinear_options:\n"
-	"-b probability_estimates: whether to predict probability estimates, 0 or 1 (default 0)\n"
-	);
+			"Usage: [predicted_label, accuracy, decision_values/prob_estimates] = predict(testing_label_vector, testing_instance_matrix, model, 'liblinear_options','col')\n"
+			"liblinear_options:\n"
+			"-b probability_estimates: whether to predict probability estimates, 0 or 1 (default 0)\n"
+			"col:\n"
+			"	if 'col' is setted testing_instance_matrix is parsed in column format, otherwise is in row format"
+			);
 }
 
 void mexFunction( int nlhs, mxArray *plhs[],
-		 int nrhs, const mxArray *prhs[] )
+		int nrhs, const mxArray *prhs[] )
 {
 	int prob_estimate_flag = 0;
 	struct model *model_;
+	char cmd[CMD_LEN];
+	col_format_flag = 0;
 
-	if(nrhs > 4 || nrhs < 3)
+	if(nrhs > 5 || nrhs < 3)
 	{
 		exit_with_help();
 		fake_answer(plhs);
 		return;
+	}
+	if(nrhs == 5)
+	{
+		mxGetString(prhs[4], cmd, mxGetN(prhs[4])+1);
+		if(strcmp(cmd, "col") == 0)
+		{			
+			col_format_flag = 1;
+		}
 	}
 
 	if(mxIsStruct(prhs[2]))
@@ -202,7 +219,7 @@ void mexFunction( int nlhs, mxArray *plhs[],
 		if(nrhs==4)
 		{
 			int i, argc = 1;
-			char cmd[CMD_LEN], *argv[CMD_LEN/2];
+			char *argv[CMD_LEN/2];
 
 			// put options in argv[]
 			mxGetString(prhs[3], cmd,  mxGetN(prhs[3]) + 1);
@@ -245,13 +262,21 @@ void mexFunction( int nlhs, mxArray *plhs[],
 
 		if(prob_estimate_flag)
 		{
-			if(model_->param.solver_type==L2LOSS_SVM)
+			if(model_->param.solver_type!=L2_LR)
 			{
-				mexPrintf("probability output for L2LOSS_SVM is not supported yet\n");
+				mexPrintf("probability output is only supported for L2_LR\n");
 				prob_estimate_flag=0;
 			}
 		}
-		do_predict(plhs, prhs, model_, prob_estimate_flag);
+
+		if(mxIsSparse(prhs[1]))
+			do_predict(plhs, prhs, model_, prob_estimate_flag);
+		else
+		{
+			mexPrintf("Testing_instance_matrix must be sparse\n");
+			fake_answer(plhs);
+		}
+
 		// destroy model_
 		destroy_model(model_);
 	}

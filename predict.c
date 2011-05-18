@@ -35,6 +35,16 @@ void do_predict(FILE *input, FILE *output, struct model* model_)
 			fprintf(stderr, "probability output for L2LOSS_SVM is not supported yet\n");
 			return;
 		}
+		else if(model_->param.solver_type==L2LOSS_SVM_DUAL)
+		{
+			fprintf(stderr, "probability output for L2LOSS_SVM_DUAL is not supported yet\n");
+			return;
+		}
+		else if(model_->param.solver_type==L1LOSS_SVM_DUAL)
+		{
+			fprintf(stderr, "probability output for L1LOSS_SVM_DUAL is not supported yet\n");
+			return;
+		}
 
 		labels=(int *) malloc(nr_class*sizeof(int));
 		get_labels(model_,labels);

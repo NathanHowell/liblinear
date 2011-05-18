@@ -1,6 +1,5 @@
-#include <time.h>
-
 #include <stdio.h>
+#include <math.h>
 #include <stdlib.h>
 #include <string.h>
 #include <ctype.h>
@@ -15,21 +14,31 @@ typedef int mwIndex;
 
 #define CMD_LEN 2048
 #define Malloc(type,n) (type *)malloc((n)*sizeof(type))
+#define INF HUGE_VAL
 
 void exit_with_help()
 {
 	mexPrintf(
-	"Usage: model = train(training_label_vector, training_instance_matrix, 'liblinear_options');\n"
+	"Usage: model = train(training_label_vector, training_instance_matrix, 'liblinear_options', 'col');\n"
 	"liblinear_options:\n"
-	"-s type : set type of solver (default 0)\n"
+	"-s type : set type of solver (default 1)\n"
 	"	0 -- L2 logistic regression\n"
-	"	1 -- L1 logistic regression (not supported yet)\n"
-	"	2 -- L2-loss support vector machines\n"
+	"	1 -- L2-loss support vector machines (dual)\n"	
+	"	2 -- L2-loss support vector machines (primal)\n"
+	"	3 -- L1-loss support vector machines (dual)\n"
 	"-c cost : set the parameter C (default 1)\n"
-	"-e epsilon : set tolerance of termination criterion (default 0.01)\n"
+	"-e epsilon : set tolerance of termination criterion\n"
+	"	-s 0 and 2\n" 
+	"		|f'(w)|_2 <= eps*min(pos,neg)/l*|f'(w0)|_2,\n" 
+	"		where f is the primal function, (default 0.01)\n"
+	"	-s 1 and 3\n"
+	"		|min(max(alpha_i - G_i,0),C)-alpha_i|<= eps,\n"
+	"		where G is the gradient of the dual, (default 0.1)\n"
 	"-B bias : if bias >= 0, instance x becomes [x; bias]; if < 0, no bias term added (default 1)\n"
 	"-wi weight: weights adjust the parameter C of different classes (see README for details)\n"
 	"-v n: n-fold cross validation mode\n"
+	"col:\n"
+	"	if 'col' is setted, training_instance_matrix is parsed in column format, otherwise is in row format\n"
 	);
 }
 
@@ -39,6 +48,7 @@ struct problem prob;		// set by read_problem
 struct model *model_;
 struct feature_node *x_space;
 int cross_validation_flag;
+int col_format_flag;
 int nr_fold;
 double bias=1.;
 
@@ -69,9 +79,9 @@ int parse_command_line(int nrhs, const mxArray *prhs[], char *model_file_name)
 	char *argv[CMD_LEN/2];
 
 	// default values
-	param.solver_type = L2_LR;
+	param.solver_type = L2LOSS_SVM_DUAL;
 	param.C = 1;
-	param.eps = 0.01;
+	param.eps = INF; // see setting below
 	param.nr_weight = 0;
 	param.weight_label = NULL;
 	param.weight = NULL;
@@ -81,6 +91,12 @@ int parse_command_line(int nrhs, const mxArray *prhs[], char *model_file_name)
 		return 1;
 	if(nrhs == 2)
 		return 0;
+	if(nrhs == 4)
+	{
+		mxGetString(prhs[3], cmd, mxGetN(prhs[3])+1);
+		if(strcmp(cmd, "col") == 0)
+			col_format_flag = 1;
+	}
 
 	// put options in argv[]
 	mxGetString(prhs[2], cmd,  mxGetN(prhs[2]) + 1);
@@ -130,6 +146,13 @@ int parse_command_line(int nrhs, const mxArray *prhs[], char *model_file_name)
 				return 1;
 		}
 	}
+	if(param.eps == INF)
+	{
+		if(param.solver_type == L2_LR || param.solver_type == L2LOSS_SVM)
+			param.eps = 0.01;
+		else if(param.solver_type == L2LOSS_SVM_DUAL || param.solver_type == L1LOSS_SVM_DUAL)
+			param.eps = 0.1;
+	}
 	return 0;
 }
 
@@ -144,10 +167,13 @@ int read_problem_sparse(const mxArray *label_vec, const mxArray *instance_mat)
 	mwIndex *ir, *jc;
 	int elements, max_index, num_samples;
 	double *samples, *labels;
-	mxArray *instance_mat_tr; // transposed instance sparse matrix
+	mxArray *instance_mat_col; // instance sparse matrix in column format
 
-	// transpose instance matrix
+	if(col_format_flag)
+		instance_mat_col = (mxArray *)instance_mat;
+	else
 	{
+		// transpose instance matrix
 		mxArray *prhs[1], *plhs[1];
 		prhs[0] = mxDuplicateArray(instance_mat);
 		if(mexCallMATLAB(1, plhs, 1, prhs, "transpose"))
@@ -155,22 +181,22 @@ int read_problem_sparse(const mxArray *label_vec, const mxArray *instance_mat)
 			mexPrintf("Error: cannot transpose training instance matrix\n");
 			return -1;
 		}
-		instance_mat_tr = plhs[0];
+		instance_mat_col = plhs[0];
 		mxDestroyArray(prhs[0]);
 	}
 
 	// each column is one instance
 	labels = mxGetPr(label_vec);
-	samples = mxGetPr(instance_mat_tr);
-	ir = mxGetIr(instance_mat_tr);
-	jc = mxGetJc(instance_mat_tr);
+	samples = mxGetPr(instance_mat_col);
+	ir = mxGetIr(instance_mat_col);
+	jc = mxGetJc(instance_mat_col);
 
-	num_samples = mxGetNzmax(instance_mat_tr);
+	num_samples = mxGetNzmax(instance_mat_col);
 
 	// the number of instance
-	prob.l = mxGetN(instance_mat_tr);
+	prob.l = mxGetN(instance_mat_col);
 	elements = num_samples + prob.l*2;
-	max_index = mxGetM(instance_mat_tr);
+	max_index = mxGetM(instance_mat_col);
 
 	prob.y = Malloc(int, prob.l);
 	prob.x = Malloc(struct feature_node*, prob.l);
@@ -217,8 +243,10 @@ void mexFunction( int nlhs, mxArray *plhs[],
 	// (for cross validation and probability estimation)
 	srand(1);
 
+	col_format_flag = 0;
+
 	// Translate the input Matrix to the format such that train.exe can recognize it
-	if(nrhs > 0 && nrhs < 4)
+	if(nrhs > 0 && nrhs < 5)
 	{
 		if(parse_command_line(nrhs, prhs, NULL))
 		{
@@ -258,6 +286,8 @@ void mexFunction( int nlhs, mxArray *plhs[],
 		else
 		{
 			int nr_feat = mxGetM(prhs[1]);
+			if(col_format_flag)
+				nr_feat = mxGetN(prhs[1]);
 			const char *error_msg;
 			model_ = train(&prob, &param);
 			error_msg = model_to_matlab_structure(plhs, nr_feat, model_);
@@ -277,4 +307,3 @@ void mexFunction( int nlhs, mxArray *plhs[],
 		return;
 	}
 }
-

@@ -64,7 +64,7 @@ void TRON::tron(double *w)
 	double gnorm1 = delta;
 	double gnorm = gnorm1;
 
-	if (gnorm1 < eps)
+	if (gnorm <= eps*gnorm1)
 		search = 0;
 
 	iter = 1;
@@ -114,15 +114,15 @@ void TRON::tron(double *w)
 		        fun_obj->grad(w, g);
 
 			gnorm = dnrm2_(&n, g, &inc);
-			if (gnorm < eps*gnorm1)
+			if (gnorm <= eps*gnorm1)
 				break;
 		}
-		if (f < 1.0e-32)
+		if (f < -1.0e+32)
 		{
 			printf("warning: f < 1.0e-32\n");
 			break;
 		}
-		if (fabs(actred) <= 0 && fabs(prered) <= 0)
+		if (fabs(actred) <= 0 && prered <= 0)
 		{
 			printf("warning: actred and prered <= 0\n");
 			break;

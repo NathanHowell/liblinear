@@ -1,7 +1,7 @@
 Liblinear is a simple package for solving large-scale regularized
-linear classification by trust region Newton's Method. It currently
-supports L2-regularized logistic regression and L2-loss support vector
-machines. This document explains the usage of liblinear.
+linear classification. It currently supports L2-regularized logistic
+regression, L2-loss support vector machines, and L1-loss support
+vector machines. This document explains the usage of liblinear.
 
 Table of Contents
 =================
@@ -22,8 +22,8 @@ When to use LIBLINEAR but not LIBSVM
 
 There are some large data for which with/without nonlinear mappings
 gives similar performances.  Without using kernels, one can train a
-much larger set via a linear classifier.  Document classification is
-one such application.
+much larger set via a linear classifier.  These data usually have a
+large number of features. Document classification is an example.
 
 For the software LIBSVM, please check
 http://www.csie.ntu.edu.tw/~cjlin/libsvm
@@ -79,15 +79,24 @@ and mark
 
 Usage: train [options] training_set_file [model_file]
 options:
--s type : set type of solver (default 0)
-	0 -- L2 logistic regression
-	1 -- L1 logistic regression (not supported yet)
-	2 -- L2-loss support vector machines
+-s type : set type of solver (default 1)
+	0 -- L2-regulraized logistic regression
+	1 -- L2-loss support vector machines (dual)	
+	2 -- L2-loss support vector machines (primal)
+	3 -- L1-loss support vector machines (dual)
 -c cost : set the parameter C (default 1)
--e epsilon : set tolerance of termination criterion (default 0.1)
+-e epsilon : set tolerance of termination criterion
+	-s 0 and 2 
+		|f'(w)|_2 <= eps*min(pos,neg)/l*|f'(w0)|_2, 
+		where f is the primal function, (default 0.01)
+	-s 1 and 3
+		|min(max(alpha_i - G_i,0),C)-alpha_i|<= eps, 
+		where G is the gradient of the dual, (default 0.1)
 -B bias : if bias >= 0, instance x becomes [x; bias]; if < 0, no bias term added (default 1)
 -wi weight: weights adjust the parameter C of different classes (see README for details)
 -v n: n-fold cross validation mode
+
+Formulations:
 
 For L2-regularized logistic regression, we solve
 
@@ -97,11 +106,21 @@ For L2-loss SVM, we solve
 
 min_w w^Tw/2 + C \sum max(0, 1- y_i w^Tx_i)^2
 
-The stopping criterion is
+For L2-loss SVM dual, we solve
 
-	|f'(w^k)|_2 <= epsilon |f'(w^0)|,
+min_alpha  0.5(alpha^T (Q + I/2/C) alpha) - e^T alpha 
+    s.t.   0 <= alpha_i,
 
-where epsilon is specified by -e.
+For L1-loss SVM dual, we solve
+
+min_alpha  0.5(alpha^T Q alpha) - e^T alpha 
+    s.t.   0 <= alpha_i <= C,
+
+where
+
+Q is a matrix with Q_ij = y_i y_j x_i^T x_j.
+
+If bias >= 0, w becomes [w; w_{n+1}] and x becomes [x; bias].
 
 We implement 1-vs-the rest multi-class strategy. In training i
 vs. non_i, their C parameters are (weight from -wi)*C and C,
@@ -120,17 +139,17 @@ Examples
 
 > train data_file
 
-Train a logistic regression model.
-
-> train -s 2 data_file
-
 Train linear SVM with L2-loss function.
+
+> train -s 0 data_file
+
+Train a logistic regression model.
 
 > train -v 5 -e 0.001 data_file
 
-Do five-fold cross-validation using L2-regularized logistic
-regression. Use a smaller stopping tolerance 0.001 than the default
-0.01 if you want more accurate solutions.
+Do five-fold cross-validation using L2-loss svm.
+Use a smaller stopping tolerance 0.001 than the default
+0.1 if you want more accurate solutions.
 
 > train -c 10 -w1 2 -w2 5 -w3 2 four_class_data_file
 
@@ -149,8 +168,6 @@ The C values for the two classes are 10 and 50.
 > predict -b 1 test_file data_file.model output_file
 
 Output probability estimates (for logistic regression only).
-
-
 
 Library Usage
 =============
@@ -216,14 +233,15 @@ Library Usage
 		double* weight;
 	};
 
-    solver_type can be one of L2_LR, L1_LR, L2LOSS_SVM, but L1_LR is not supported yet.
+    solver_type can be one of L2_LR, L2LOSS_SVM_DUAL, L2LOSS_SVM, L1LOSS_SVM_DUAL.
 
-    L2_LR		L2 logistic regression
-    L1_LR		L1 logistic regression
-    L2LOSS_SVM		L2-loss support vector machines
+    L2_LR		L2-regularized logistic regression
+    L2LOSS_SVM_DUAL	L2-loss support vector machines (dual) 
+    L2LOSS_SVM		L2-loss support vector machines (primal)
+    L1LOSS_SVM_DUAL	L1-loss support vector machines (dual) 	
 
     C is the cost of constraints violation. (we usually use 1 to 1000)
-    eps is the stopping criterion. (we usually use 0.001).
+    eps is the stopping criterion. (we usually use 0.01).
 
     nr_weight, weight_label, and weight are used to change the penalty
     for some classes (If the weight for a class is not changed, it is
@@ -322,7 +340,7 @@ Visual C++, use the following steps:
 1. Open a dos command box and change to liblinear directory. If
 environment variables of VC++ have not been set, type
 
-"C:\Program Files\Microsoft Visual Studio .NET 2003\Vc7\bin\vcvars32.bat"
+"C:\Program Files\Microsoft Visual Studio 8\VC\bin\vcvars32.bat"
 
 You may have to modify the above according which version of VC++ or
 where it is installed.

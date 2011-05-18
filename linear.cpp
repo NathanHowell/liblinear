@@ -3,15 +3,23 @@
 #include <stdlib.h>
 #include <string.h>
 #include <stdarg.h>
+#include <time.h>
 #include "linear.h"
 #include "tron.h"
-
+typedef signed char schar;
 template <class T> inline void swap(T& x, T& y) { T t=x; x=y; y=t; }
+#ifndef min
+template <class T> inline T min(T x,T y) { return (x<y)?x:y; }
+#endif
+#ifndef max
+template <class T> inline T max(T x,T y) { return (x>y)?x:y; }
+#endif
 
 #define Malloc(type,n) (type *)malloc((n)*sizeof(type))
+#define INF HUGE_VAL
 
 #if 1
-void info(char *fmt,...)
+void info(const char *fmt,...)
 {
 	va_list ap;
 	va_start(ap,fmt);
@@ -26,6 +34,161 @@ void info_flush()
 void info(char *fmt,...) {}
 void info_flush() {}
 #endif
+
+class l2_lr_fun : public function
+{
+public:
+	l2_lr_fun(const problem *prob, double Cp, double Cn);
+	~l2_lr_fun();
+	
+	double fun(double *w);
+	void grad(double *w, double *g);
+	void Hv(double *s, double *Hs);
+
+	int get_nr_variable(void);
+
+private:
+	void Xv(double *v, double *Xv);
+	void XTv(double *v, double *XTv);
+
+	double *C;
+	double *z;
+	double *D;
+	const problem *prob;
+};
+
+l2_lr_fun::l2_lr_fun(const problem *prob, double Cp, double Cn)
+{
+	int i;
+	int l=prob->l;
+	int *y=prob->y;
+
+	this->prob = prob;
+
+	z = new double[l];
+	D = new double[l];
+	C = new double[l];
+
+	for (i=0; i<l; i++)
+	{
+		if (y[i] == 1)
+			C[i] = Cp;
+		else
+			C[i] = Cn;
+	}
+}
+
+l2_lr_fun::~l2_lr_fun()
+{
+	delete[] z;
+	delete[] D;
+	delete[] C;
+}
+
+
+double l2_lr_fun::fun(double *w)
+{
+	int i;
+	double f=0;
+	int *y=prob->y;
+	int l=prob->l;
+	int n=prob->n;
+
+	Xv(w, z);
+	for(i=0;i<l;i++)
+	{
+	        double yz = y[i]*z[i];
+		if (yz >= 0)
+		        f += C[i]*log(1 + exp(-yz));
+		else
+		        f += C[i]*(-yz+log(1 + exp(yz)));
+	}
+	f = 2*f;
+	for(i=0;i<n;i++)
+		f += w[i]*w[i];
+	f /= 2.0;
+
+	return(f);
+}
+
+void l2_lr_fun::grad(double *w, double *g)
+{
+	int i;
+	int *y=prob->y;
+	int l=prob->l;
+	int n=prob->n;
+
+	for(i=0;i<l;i++)
+	{
+		z[i] = 1/(1 + exp(-y[i]*z[i]));
+		D[i] = z[i]*(1-z[i]);
+		z[i] = C[i]*(z[i]-1)*y[i];
+	}
+	XTv(z, g);
+
+	for(i=0;i<n;i++)
+		g[i] = w[i] + g[i];
+}
+
+int l2_lr_fun::get_nr_variable(void)
+{
+	return prob->n;
+}
+
+void l2_lr_fun::Hv(double *s, double *Hs)
+{
+	int i;
+	int l=prob->l;
+	int n=prob->n;
+	double *wa = new double[l];
+
+	Xv(s, wa);
+	for(i=0;i<l;i++)
+		wa[i] = C[i]*D[i]*wa[i];
+
+	XTv(wa, Hs);
+	for(i=0;i<n;i++)
+		Hs[i] = s[i] + Hs[i];
+	delete[] wa;
+}
+
+void l2_lr_fun::Xv(double *v, double *Xv)
+{
+	int i;
+	int l=prob->l;
+	feature_node **x=prob->x;
+
+	for(i=0;i<l;i++)
+	{
+		feature_node *s=x[i];
+		Xv[i]=0;
+		while(s->index!=-1)
+		{
+			Xv[i]+=v[s->index-1]*s->value;
+			s++;
+		}
+	}
+}
+
+void l2_lr_fun::XTv(double *v, double *XTv)
+{
+	int i;
+	int l=prob->l;
+	int n=prob->n;
+	feature_node **x=prob->x;
+
+	for(i=0;i<n;i++)
+		XTv[i]=0;
+	for(i=0;i<l;i++)
+	{
+		feature_node *s=x[i];
+		while(s->index!=-1)
+		{
+			XTv[s->index-1]+=v[i]*s->value;
+			s++;
+		}
+	}
+}
 
 class l2loss_svm_fun : public function
 {
@@ -49,28 +212,6 @@ private:
 	double *D;
 	int *I;
 	int sizeI;
-	const problem *prob;
-};
-
-class l2_lr_fun : public function
-{
-public:
-	l2_lr_fun(const problem *prob, double Cp, double Cn);
-	~l2_lr_fun();
-	
-	double fun(double *w);
-	void grad(double *w, double *g);
-	void Hv(double *s, double *Hs);
-
-	int get_nr_variable(void);
-
-private:
-	void Xv(double *v, double *Xv);
-	void XTv(double *v, double *XTv);
-
-	double *C;
-	double *z;
-	double *D;
 	const problem *prob;
 };
 
@@ -225,137 +366,207 @@ void l2loss_svm_fun::subXTv(double *v, double *XTv)
 	}
 }
 
-l2_lr_fun::l2_lr_fun(const problem *prob, double Cp, double Cn)
+// A Coordinate descend algorithm for 
+// solving L1 loss and L2 loss SVM dual optimization problem
+// Solves:
+//
+//  min_\alpha  0.5(\alpha^T (Q + D)\alpha) - e^T \alpha,
+//    s.t.      0 <= alpha_i <= upper_bound_i,
+// 
+//  where Q is y^TX^TXy and
+//  D is a diagonal matrix with D_ii = 1/diag_i
+//
+// In L1-SVM case:
+// 		upper_bound_i = Cp if y_i = 1
+// 		upper_bound_i = Cn if y_i = -1		
+// 		diag_i = INF
+// In L2-Svm case:
+// 		upper_bound_i = INF
+// 		diag_i = 2*Cp	if y_i = 1
+// 		diag_i = 2*Cn	if y_i = -1
+//
+// Given: 
+// x, y, Cp, Cn
+// eps is the stopping tolerance
+//
+// solution will be put in w
+
+static void solve_linear_c_svc(
+	const problem *prob, double *w, double eps, 
+	double Cp, double Cn, int solver_type)
 {
-	int i;
-	int l=prob->l;
-	int *y=prob->y;
+	int l = prob->l;
+	int n = prob->n;
+	int i, iter = 0;
+	double C, d;
+	double *QD = new double[l];
+	double *G = new double[l];
+	int max_iter = 2000;
+	int *index = new int[l];
+	double error_i, error;
+	double *alpha = new double[l];
+	schar *y = new schar[l];
+	int active_size = l;
 
-	this->prob = prob;
-
-	z = new double[l];
-	D = new double[l];
-	C = new double[l];
-
-	for (i=0; i<l; i++)
+	// default solver_type: L2LOSS_SVM_DUAL
+	double diag_p = 2*Cp, diag_n = 2*Cn;
+	double upper_bound_p = INF, upper_bound_n = INF;
+	if(solver_type == L1LOSS_SVM_DUAL)
 	{
-		if (y[i] == 1)
-			C[i] = Cp;
-		else
-			C[i] = Cn;
+		diag_p = INF, diag_n = INF;
+		upper_bound_p = Cp, upper_bound_n = Cn;
 	}
-}
+	
 
-l2_lr_fun::~l2_lr_fun()
-{
-	delete[] z;
-	delete[] D;
-	delete[] C;
-}
-
-
-double l2_lr_fun::fun(double *w)
-{
-	int i;
-	double f=0;
-	int *y=prob->y;
-	int l=prob->l;
-	int n=prob->n;
-
-	Xv(w, z);
-	for(i=0;i<l;i++)
+	for(i=0; i<n; i++)
+		w[i] = 0;
+	for(i=0; i<l; i++)
 	{
-	        double yz = y[i]*z[i];
-		if (yz >= 0)
-		        f += C[i]*log(1 + exp(-yz));
-		else
-		        f += C[i]*(-yz+log(1 + exp(yz)));
-	}
-	f = 2*f;
-	for(i=0;i<n;i++)
-		f += w[i]*w[i];
-	f /= 2.0;
-
-	return(f);
-}
-
-void l2_lr_fun::grad(double *w, double *g)
-{
-	int i;
-	int *y=prob->y;
-	int l=prob->l;
-	int n=prob->n;
-
-	for(i=0;i<l;i++)
-	{
-		z[i] = 1/(1 + exp(-y[i]*z[i]));
-		D[i] = z[i]*(1-z[i]);
-		z[i] = C[i]*(z[i]-1)*y[i];
-	}
-	XTv(z, g);
-
-	for(i=0;i<n;i++)
-		g[i] = w[i] + g[i];
-}
-
-int l2_lr_fun::get_nr_variable(void)
-{
-	return prob->n;
-}
-
-void l2_lr_fun::Hv(double *s, double *Hs)
-{
-	int i;
-	int l=prob->l;
-	int n=prob->n;
-	double *wa = new double[l];
-
-	Xv(s, wa);
-	for(i=0;i<l;i++)
-		wa[i] = C[i]*D[i]*wa[i];
-
-	XTv(wa, Hs);
-	for(i=0;i<n;i++)
-		Hs[i] = s[i] + Hs[i];
-	delete[] wa;
-}
-
-void l2_lr_fun::Xv(double *v, double *Xv)
-{
-	int i;
-	int l=prob->l;
-	feature_node **x=prob->x;
-
-	for(i=0;i<l;i++)
-	{
-		feature_node *s=x[i];
-		Xv[i]=0;
-		while(s->index!=-1)
+		alpha[i] = 0;
+		if(prob->y[i] > 0)
 		{
-			Xv[i]+=v[s->index-1]*s->value;
-			s++;
+			y[i] = +1; 
+			QD[i] = 1/diag_p;
+		}
+		else
+		{
+			y[i] = -1;
+			QD[i] = 1/diag_n;
+		}
+
+		feature_node *xi = prob->x[i];
+		while (xi->index != -1)
+		{
+			QD[i] += (xi->value)*(xi->value);
+			xi++;
+		}
+		index[i] = i;
+	}
+
+	while (iter < max_iter)
+	{
+		error = -INF;
+		for (i=0; i<active_size; i++)
+		{
+			int j = i+rand()%(active_size-i);
+			swap(index[i], index[j]);
+		}
+
+		for(int k=0; k<active_size; k++)
+		{
+			i = index[k];
+			G[i] = 0;
+			schar yi = y[i];
+
+			feature_node *xi = prob->x[i];
+			while(xi->index!= -1)
+			{
+				G[i] += w[xi->index-1]*(xi->value);
+				xi++;
+			}
+			G[i] = G[i]*yi-1;
+
+		    if(yi == 1)
+			{
+				C = upper_bound_p; 
+				G[i] += alpha[i]/diag_p; 
+			}
+			else 
+			{
+				C = upper_bound_n;
+				G[i] += alpha[i]/diag_n; 
+			}
+			error_i = fabs(min(max(alpha[i] - G[i], 0.0), C) - alpha[i]);
+			error = max(error_i, error);
+			if(error_i <= 1.0e-12)
+				continue;
+			else
+			{
+				double alpha_old = alpha[i];
+				alpha[i] = min(max(alpha[i] - G[i]/QD[i], 0.0), C);
+				d = (alpha[i] - alpha_old)*yi;
+				xi = prob->x[i];
+				while (xi->index != -1)
+				{
+					w[xi->index-1] += d*xi->value;
+					xi++;
+				}
+			}
+		}
+
+		if(error <= eps)
+		{
+			if(active_size == l)
+				break;
+			else
+			{
+				active_size = l;
+				info("*"); info_flush();
+				continue;
+			}
+		}
+
+
+		iter++;
+
+		// shrinking
+		if(iter % 5 == 0)
+		{
+			info("."); info_flush();
+
+			for(int k = 0; k < active_size; k++)
+			{
+				i = index[k];
+				schar yi = y[i];
+				if(yi == 1) C = upper_bound_p; else C = upper_bound_n;
+
+				if(alpha[i] == 0 && G[i] > -100*eps)
+				{
+					active_size--;
+					swap(index[k], index[active_size]);
+				}
+				else if( alpha[i] == C && G[i] < 100*eps)
+				{
+					active_size--;
+					swap(index[k], index[active_size]);
+				}
+			}
 		}
 	}
-}
 
-void l2_lr_fun::XTv(double *v, double *XTv)
-{
-	int i;
-	int l=prob->l;
-	int n=prob->n;
-	feature_node **x=prob->x;
+	info("\noptimization finished, #iter = %d\n",iter);
+	if (iter >= max_iter)
+		info("Warning: reaching max number of iterations\n");
 
-	for(i=0;i<n;i++)
-		XTv[i]=0;
-	for(i=0;i<l;i++)
+	// calculate objective value
+	
+	for(int i=0; i<l; i++)
 	{
-		feature_node *s=x[i];
-		while(s->index!=-1)
+		G[i] = 0;
+		schar yi = y[i];
+		feature_node *xi = prob->x[i];
+		while(xi->index!= -1)
 		{
-			XTv[s->index-1]+=v[i]*s->value;
-			s++;
+			G[i] += w[xi->index-1]*(xi->value);
+			xi++;
 		}
+		G[i] = G[i]*yi-1;
+		if(solver_type == L1LOSS_SVM_DUAL)
+			if(yi == 1) C = Cp; else C = Cn;
+		else if(solver_type == L2LOSS_SVM_DUAL)
+			if(yi == 1) G[i] += alpha[i]/Cp/2; else G[i] += alpha[i]/Cn/2; // for L2-SVM
 	}
+
+	double v = 0;
+	for(i=0;i<l;i++)
+		v += alpha[i] * (G[i]-1);
+	info("Objective value = %lf\n",v/2);
+	
+	delete [] G;
+	delete [] QD;
+	delete [] alpha;
+	delete [] y;
+	delete [] index;
 }
 
 // label: label name, start: begin of each class, count: #data of classes, perm: indices to the original data
@@ -420,29 +631,41 @@ void group_classes(const problem *prob, int *nr_class_ret, int **label_ret, int 
 void train_one(const problem *prob, const parameter *param, double *w, double Cp, double Cn)
 {
 	double eps=param->eps;
-	info("eps %f Cp %f Cn %f\n", eps, Cp, Cn);
+	int pos = 0;
+	int neg = 0;
+	for (int i=0; i<prob->l;i++)
+		if (prob->y[i]==+1)
+			pos++;
+	neg = prob->l - pos;
 
 	function *fun_obj=NULL;
 	switch(param->solver_type)
 	{
 		case L2_LR:
+		{
 			fun_obj=new l2_lr_fun(prob, Cp, Cn);
+			TRON tron_obj(fun_obj, eps*min(pos,neg)/prob->l);
+			tron_obj.tron(w);
+			delete fun_obj;
 			break;
+		}
 		case L2LOSS_SVM:
+		{
 			fun_obj=new l2loss_svm_fun(prob, Cp, Cn);
+			TRON tron_obj(fun_obj, eps*min(pos,neg)/prob->l);
+			tron_obj.tron(w);
+			delete fun_obj;
+			break;
+		}
+		case L2LOSS_SVM_DUAL:
+			solve_linear_c_svc(prob, w, eps, Cp, Cn, L2LOSS_SVM_DUAL);
+			break;
+		case L1LOSS_SVM_DUAL:
+			solve_linear_c_svc(prob, w, eps, Cp, Cn, L1LOSS_SVM_DUAL);
 			break;
 		default:
-			fprintf(stderr, "Error: unknown solver_type or not supported yet (L1_LR)\n");
+			fprintf(stderr, "Error: unknown solver_type\n");
 			break;
-	}
-
-	if(fun_obj)
-	{
-		TRON tron_obj(fun_obj, eps);
-
-		tron_obj.tron(w);
-
-		delete fun_obj;
 	}
 }
 
@@ -563,7 +786,7 @@ void destroy_model(struct model *model_)
 
 const char *solver_type_table[]=
 {
-	"L2_LR", "L1_LR", "L2LOSS_SVM", NULL
+	"L2_LR", "L2LOSS_SVM_DUAL", "L2LOSS_SVM","L1LOSS_SVM_DUAL", NULL
 };
 
 int save_model(const char *model_file_name, const struct model *model_)
@@ -811,12 +1034,13 @@ const char *check_parameter(const problem *prob, const parameter *param)
 		return "C <= 0";
 
 	if(param->solver_type != L2_LR
-	   && param->solver_type != L1_LR
-	   && param->solver_type != L2LOSS_SVM)
+	   && param->solver_type != L2LOSS_SVM_DUAL
+	   && param->solver_type != L2LOSS_SVM
+	   && param->solver_type != L1LOSS_SVM_DUAL)
 		return "unknown solver type";
 
-	if(param->solver_type == 1)
-		return "sorry! sover_type = 1 (L1_LR) is not supported yet";
+//	if(param->solver_type == L1_LR)
+//		return "sorry! sover_type = 1 (L1_LR) is not supported yet";
 
 	return NULL;
 }
