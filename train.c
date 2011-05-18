@@ -2,18 +2,22 @@
 #include <stdlib.h>
 #include <string.h>
 #include <ctype.h>
-#include "lr.h"
+#include "linear.h"
 #define Malloc(type,n) (type *)malloc((n)*sizeof(type))
 
 void exit_with_help()
 {
 	printf(
-	"Usage: lr-train [options] training_set_file [model_file]\n"
+	"Usage: train [options] training_set_file [model_file]\n"
 	"options:\n"
+	"-s type : set type of solver (default 0)\n"
+	"	0 -- L2 logistic regression\n"
+	"	1 -- L1 logistic regression (not supported yet)\n"
+	"	2 -- L2-loss support vector machines\n"
 	"-c cost : set the parameter C (default 1)\n"
-	"-e epsilon : set tolerance of termination criterion (default 0.1)\n"
-	"-B bias : set bias (default 1) so instance x becomes [x; bias]\n"
-	"-wi weight: set the parameter C of class i\n"
+	"-e epsilon : set tolerance of termination criterion (default 0.01)\n"
+	"-B bias : if bias >= 0, instance x becomes [x; bias]; if < 0, no bias term added (default 1)\n"
+	"-wi weight: weights adjust the parameter C of different classes (see README for details)\n"
 	"-v n: n-fold cross validation mode\n"
 	);
 	exit(1);
@@ -23,11 +27,11 @@ void parse_command_line(int argc, char **argv, char *input_file_name, char *mode
 void read_problem(const char *filename);
 void do_cross_validation();
 
-struct lr_node *x_space;
-struct lr_parameter param;
-struct lr_problem prob;
-struct lr_model* model;
-int cross_validation;
+struct feature_node *x_space;
+struct parameter param;
+struct problem prob;
+struct model* model_;
+int flag_cross_validation;
 int nr_fold;
 double bias;
 
@@ -39,7 +43,7 @@ int main(int argc, char **argv)
 
 	parse_command_line(argc, argv, input_file_name, model_file_name);
 	read_problem(input_file_name);
-	error_msg = lr_check_parameter(&prob,&param);
+	error_msg = check_parameter(&prob,&param);
 
 	if(error_msg)
 	{
@@ -47,17 +51,17 @@ int main(int argc, char **argv)
 		exit(1);
 	}
 
-	if(cross_validation)
+	if(flag_cross_validation)
 	{
 		do_cross_validation();
 	}
 	else
 	{
-		model=lr_train(&prob, &param);
-		lr_save_model(model_file_name, model);
-		lr_destroy_model(model);
+		model_=train(&prob, &param);
+		save_model(model_file_name, model_);
+		destroy_model(model_);
 	}
-	lr_destroy_param(&param);
+	destroy_param(&param);
 	free(prob.y);
 	free(prob.x);
 	free(x_space);
@@ -71,7 +75,7 @@ void do_cross_validation()
 	int total_correct = 0;
 	int *target = Malloc(int, prob.l);
 
-	lr_cross_validation(&prob,&param,nr_fold,target);
+	cross_validation(&prob,&param,nr_fold,target);
 
 	for(i=0;i<prob.l;i++)
 		if(target[i] == prob.y[i])
@@ -86,12 +90,13 @@ void parse_command_line(int argc, char **argv, char *input_file_name, char *mode
 	int i;
 
 	// default values
+	param.solver_type = L2_LR;
 	param.C = 1;
-	param.eps = 0.1;
+	param.eps = 0.01;
 	param.nr_weight = 0;
 	param.weight_label = NULL;
 	param.weight = NULL;
-	cross_validation = 0;
+	flag_cross_validation = 0;
 	bias = 1;
 
 	// parse options
@@ -102,6 +107,10 @@ void parse_command_line(int argc, char **argv, char *input_file_name, char *mode
 			exit_with_help();
 		switch(argv[i-1][1])
 		{
+			case 's':
+				param.solver_type = atoi(argv[i]);
+				break;
+
 			case 'c':
 				param.C = atof(argv[i]);
 				break;
@@ -123,7 +132,7 @@ void parse_command_line(int argc, char **argv, char *input_file_name, char *mode
 				break;
 
 			case 'v':
-				cross_validation = 1;
+				flag_cross_validation = 1;
 				nr_fold = atoi(argv[i]);
 				if(nr_fold < 2)
 				{
@@ -196,8 +205,8 @@ out:
 	prob.bias=bias;
 
 	prob.y = Malloc(int,prob.l);
-	prob.x = Malloc(struct lr_node *, prob.l);
-	x_space = Malloc(struct lr_node, elements+prob.l);
+	prob.x = Malloc(struct feature_node *, prob.l);
+	x_space = Malloc(struct feature_node, elements+prob.l);
 
 	max_index = 0;
 	j=0;
@@ -250,4 +259,3 @@ out2:
 
 	fclose(fp);
 }
-

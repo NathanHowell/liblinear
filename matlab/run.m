@@ -1,4 +1,4 @@
 [y,xt] = read_sparse('../heart_scale');
-model=lrtrain(y, xt)
-[l,a]=lrpredict(y, xt, model);
+model=train(y, xt)
+[l,a]=predict(y, xt, model);
 

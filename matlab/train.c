@@ -4,10 +4,10 @@
 #include <stdlib.h>
 #include <string.h>
 #include <ctype.h>
-#include "lr.h"
+#include "linear.h"
 
 #include "mex.h"
-#include "lr_model_matlab.h"
+#include "linear_model_matlab.h"
 
 #if MX_API_VER < 0x07030000
 typedef int mwIndex;
@@ -19,17 +19,26 @@ typedef int mwIndex;
 void exit_with_help()
 {
 	mexPrintf(
-	"Usage: model = lrtrain(training_label_vector, training_instance_matrix, 'liblr_options');\n"
+	"Usage: model = train(training_label_vector, training_instance_matrix, 'liblinear_options');\n"
+	"liblinear_options:\n"
+	"-s type : set type of solver (default 0)\n"
+	"	0 -- L2 logistic regression\n"
+	"	1 -- L1 logistic regression (not supported yet)\n"
+	"	2 -- L2-loss support vector machines\n"
+	"-c cost : set the parameter C (default 1)\n"
+	"-e epsilon : set tolerance of termination criterion (default 0.01)\n"
+	"-B bias : if bias >= 0, instance x becomes [x; bias]; if < 0, no bias term added (default 1)\n"
+	"-wi weight: weights adjust the parameter C of different classes (see README for details)\n"
+	"-v n: n-fold cross validation mode\n"
 	);
 }
 
-// lr arguments
-struct lr_parameter param;		// set by parse_command_line
-struct lr_problem lrprob;		// set by read_problem
-struct lr_model *model;
-struct lr_node *x_space;
-struct lr_parameter lrparam;		// set by parse_command_line
-int cross_validation;
+// liblinear arguments
+struct parameter param;		// set by parse_command_line
+struct problem prob;		// set by read_problem
+struct model *model_;
+struct feature_node *x_space;
+int cross_validation_flag;
 int nr_fold;
 double bias=1.;
 
@@ -37,16 +46,16 @@ double do_cross_validation()
 {
 	int i;
 	int total_correct = 0;
-	int *target = Malloc(int,lrprob.l);
+	int *target = Malloc(int,prob.l);
 	double retval = 0.0;
 
-	lr_cross_validation(&lrprob,&param,nr_fold,target);
+	cross_validation(&prob,&param,nr_fold,target);
 
-	for(i=0;i<lrprob.l;i++)
-		if(target[i] == lrprob.y[i])
+	for(i=0;i<prob.l;i++)
+		if(target[i] == prob.y[i])
 			++total_correct;
-	mexPrintf("Cross Validation Accuracy = %g%%\n",100.0*total_correct/lrprob.l);
-	retval = 100.0*total_correct/lrprob.l;
+	mexPrintf("Cross Validation Accuracy = %g%%\n",100.0*total_correct/prob.l);
+	retval = 100.0*total_correct/prob.l;
 
 	free(target);
 	return retval;
@@ -60,12 +69,13 @@ int parse_command_line(int nrhs, const mxArray *prhs[], char *model_file_name)
 	char *argv[CMD_LEN/2];
 
 	// default values
+	param.solver_type = L2_LR;
 	param.C = 1;
-	param.eps = 0.1;
+	param.eps = 0.01;
 	param.nr_weight = 0;
 	param.weight_label = NULL;
 	param.weight = NULL;
-	cross_validation = 0;
+	cross_validation_flag = 0;
 
 	if(nrhs <= 1)
 		return 1;
@@ -87,6 +97,9 @@ int parse_command_line(int nrhs, const mxArray *prhs[], char *model_file_name)
 			return 1;
 		switch(argv[i-1][1])
 		{
+			case 's':
+				param.solver_type = atoi(argv[i]);
+				break;
 			case 'c':
 				param.C = atof(argv[i]);
 				break;
@@ -97,7 +110,7 @@ int parse_command_line(int nrhs, const mxArray *prhs[], char *model_file_name)
 				bias = atof(argv[i]);
 				break;
 			case 'v':
-				cross_validation = 1;
+				cross_validation_flag = 1;
 				nr_fold = atoi(argv[i]);
 				if(nr_fold < 2)
 				{
@@ -155,21 +168,21 @@ int read_problem_sparse(const mxArray *label_vec, const mxArray *instance_mat)
 	num_samples = mxGetNzmax(instance_mat_tr);
 
 	// the number of instance
-	lrprob.l = mxGetN(instance_mat_tr);
-	elements = num_samples + lrprob.l*2;
+	prob.l = mxGetN(instance_mat_tr);
+	elements = num_samples + prob.l*2;
 	max_index = mxGetM(instance_mat_tr);
 
-	lrprob.y = Malloc(int, lrprob.l);
-	lrprob.x = Malloc(struct lr_node*, lrprob.l);
-	x_space = Malloc(struct lr_node, elements);
+	prob.y = Malloc(int, prob.l);
+	prob.x = Malloc(struct feature_node*, prob.l);
+	x_space = Malloc(struct feature_node, elements);
 
-	lrprob.bias=bias;
+	prob.bias=bias;
 
 	j = 0;
-	for(i=0;i<lrprob.l;i++)
+	for(i=0;i<prob.l;i++)
 	{
-		lrprob.x[i] = &x_space[j];
-		lrprob.y[i] = (int)labels[i];
+		prob.x[i] = &x_space[j];
+		prob.y[i] = (int)labels[i];
 		low = jc[i], high = jc[i+1];
 		for(k=low;k<high;k++)
 		{
@@ -177,17 +190,19 @@ int read_problem_sparse(const mxArray *label_vec, const mxArray *instance_mat)
 			x_space[j].value = samples[k];
 			j++;
 	 	}
-		if(lrprob.bias>=0)
+		if(prob.bias>=0)
 		{
 			x_space[j].index = max_index+1;
-			x_space[j].value = lrprob.bias;
+			x_space[j].value = prob.bias;
 			j++;
 		}
 		x_space[j++].index = -1;
 	}
 
-	if(lrprob.bias>=0)
-		lrprob.n = max_index+1;
+	if(prob.bias>=0)
+		prob.n = max_index+1;
+	else
+		prob.n = max_index;
 
 	return 0;
 }
@@ -202,13 +217,13 @@ void mexFunction( int nlhs, mxArray *plhs[],
 	// (for cross validation and probability estimation)
 	srand(1);
 
-	// Translate the input Matrix to the format such that lrtrain.exe can recognize it
+	// Translate the input Matrix to the format such that train.exe can recognize it
 	if(nrhs > 0 && nrhs < 4)
 	{
 		if(parse_command_line(nrhs, prhs, NULL))
 		{
 			exit_with_help();
-			lr_destroy_param(&param);
+			destroy_param(&param);
 			fake_answer(plhs);
 			return;
 		}
@@ -218,19 +233,22 @@ void mexFunction( int nlhs, mxArray *plhs[],
 		else
 			mexPrintf("Training_instance_matrix must be sparse\n");
 
-		// lrtrain's original code
-		error_msg = lr_check_parameter(&lrprob, &param);
+		// train's original code
+		error_msg = check_parameter(&prob, &param);
 
 		if(error_msg)
 		{
 			if (error_msg != NULL)
 				mexPrintf("Error: %s\n", error_msg);
-			lr_destroy_param(&param);
+			destroy_param(&param);
+			free(prob.y);
+			free(prob.x);
+			free(x_space);
 			fake_answer(plhs);
 			return;
 		}
 
-		if(cross_validation)
+		if(cross_validation_flag)
 		{
 			double *ptr;
 			plhs[0] = mxCreateDoubleMatrix(1, 1, mxREAL);
@@ -241,13 +259,16 @@ void mexFunction( int nlhs, mxArray *plhs[],
 		{
 			int nr_feat = mxGetM(prhs[1]);
 			const char *error_msg;
-			model = lr_train(&lrprob, &param);
-			error_msg = model_to_matlab_structure(plhs, nr_feat, model);
+			model_ = train(&prob, &param);
+			error_msg = model_to_matlab_structure(plhs, nr_feat, model_);
 			if(error_msg)
 				mexPrintf("Error: can't convert libsvm model to matrix structure: %s\n", error_msg);
-			lr_destroy_model(model);
+			destroy_model(model_);
 		}
-		lr_destroy_param(&param);
+		destroy_param(&param);
+		free(prob.y);
+		free(prob.x);
+		free(x_space);
 	}
 	else
 	{

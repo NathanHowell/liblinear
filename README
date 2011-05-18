@@ -1,22 +1,24 @@
-Liblr is a simple package for solving large-scale regularized logistic regression
-by trust region Newton's Method. This document explains the usage of liblr.
+Liblinear is a simple package for solving large-scale regularized
+linear classification by trust region Newton's Method. It currently
+supports L2-regularized logistic regression and L2-loss support vector
+machines. This document explains the usage of liblinear.
 
 Table of Contents
 =================
 
-- When to use LIBLR but not LIBSVM
+- When to use LIBLINEAR but not LIBSVM
 - Quick Start
 - Installation
-- `lr-train' Usage
-- `lr-predict' Usage
+- `train' Usage
+- `predict' Usage
 - Examples
 - Library Usage
 - Building Windows Binaries
 - Additional Information
 - MATLAB interface
 
-When to use LIBLR but not LIBSVM
-================================
+When to use LIBLINEAR but not LIBSVM
+====================================
 
 There are some large data for which with/without nonlinear mappings
 gives similar performances.  Without using kernels, one can train a
@@ -30,23 +32,23 @@ http://www.csie.ntu.edu.tw/~cjlin/libsvm
 Quick Start
 ===========
 
-See the section ``Installation'' for installing liblr.
+See the section ``Installation'' for installing liblinear.
 
-After installation, there are programs `lr-train' and `lr-predict' for
+After installation, there are programs `train' and `predict' for
 training and testing, respectively.
 
 About the data format, please check the README file of libsvm.
 
 A sample classification data included in this package is `heart_scale'.
 
-Type `lr-train heart_scale', and the program will read the training
+Type `train heart_scale', and the program will read the training
 data and output the model file `heart_scale.model'. If you have a test
-set called heart_scale.t, then type `lr-predict heart_scale.t
+set called heart_scale.t, then type `predict heart_scale.t
 heart_scale.model output' to see the prediction accuracy. The `output'
 file contains the predicted class labels.
 
-For more information about `lr-train' and `lr-predict', see the sections
-`lr-train' Usage and `lr-predict' Usage.
+For more information about `train' and `predict', see the sections
+`train' Usage and `predict' Usage.
 
 To obtain good performances, sometimes one needs to scale the
 data. Please check the program `svm-scale' of LIBSVM. For large and
@@ -55,7 +57,7 @@ sparse data, use `-l 0' to keep the sparsity.
 Installation
 ============
 
-On Unix systems, type `make' to build the `lr-train' and `lr-predict'
+On Unix systems, type `make' to build the `train' and `predict'
 programs. Run them without arguments to show the usages.
 
 On other systems, consult `Makefile' to build them (e.g., see
@@ -64,63 +66,108 @@ binaries (Windows binaries are in the directory `windows').
 
 This software uses some level-1 BLAS subroutines. The needed functions are 
 included in this package.  If a BLAS library is available on your
-machine, you may use it by modifying the Makefile: Unmark the following like
+machine, you may use it by modifying the Makefile: Unmark the following line
 
-	#LIBS = -lblas
+	#LIBS ?= -lblas
 
 and mark 
 
-	LIBS = blas/blas.a
+	LIBS ?= blas/blas.a
 
-`lr-train' Usage
-================
+`train' Usage
+=============
 
-Usage: lr-train [options] training_set_file [model_file]
+Usage: train [options] training_set_file [model_file]
 options:
+-s type : set type of solver (default 0)
+	0 -- L2 logistic regression
+	1 -- L1 logistic regression (not supported yet)
+	2 -- L2-loss support vector machines
 -c cost : set the parameter C (default 1)
 -e epsilon : set tolerance of termination criterion (default 0.1)
--B bias : set bias (default 1) so instance x becomes [x; bias]
--wi weight: set the parameter C of class i
+-B bias : if bias >= 0, instance x becomes [x; bias]; if < 0, no bias term added (default 1)
+-wi weight: weights adjust the parameter C of different classes (see README for details)
 -v n: n-fold cross validation mode
 
-`lr-predict' Usage
-==================
+For L2-regularized logistic regression, we solve
 
-Usage: lr-predict [options] test_file model_file output_file
+min_w w^Tw/2 + C \sum log(1 + exp(-y_i w^Tx_i))
+
+For L2-loss SVM, we solve
+
+min_w w^Tw/2 + C \sum max(0, 1- y_i w^Tx_i)^2
+
+The stopping criterion is
+
+	|f'(w^k)|_2 <= epsilon |f'(w^0)|,
+
+where epsilon is specified by -e.
+
+We implement 1-vs-the rest multi-class strategy. In training i
+vs. non_i, their C parameters are (weight from -wi)*C and C,
+respectively. If there are only two classes, we train only one
+model. Thus weight1*C vs. weight2*C is used. See examples below.
+
+`predict' Usage
+===============
+
+Usage: predict [options] test_file model_file output_file
 options:
 -b probability_estimates: whether to predict probability estimates, 0 or 1 (default 0)
 
 Examples
 ========
 
-> lr-train data_file
+> train data_file
 
-Do training and obtain a model file.
+Train a logistic regression model.
 
-> lr-train -v 5 data_file
+> train -s 2 data_file
 
-Do five-fold cross-validation
+Train linear SVM with L2-loss function.
 
-> lr-predict -b 1 test_file data_file.model output_file
+> train -v 5 -e 0.001 data_file
 
-Predict test data with probability estimates
+Do five-fold cross-validation using L2-regularized logistic
+regression. Use a smaller stopping tolerance 0.001 than the default
+0.01 if you want more accurate solutions.
+
+> train -c 10 -w1 2 -w2 5 -w3 2 four_class_data_file
+
+Train four classifiers:
+positive	negative	Cp	Cn
+class 1		class 2,3,4.	20	10
+class 2		class 1,3,4.	50	10
+class 3		class 1,2,4.	20	10
+class 4		class 1,2,3.	10	10
+
+> train -c 10 -w3 1 -w2 5 two_class_data_file
+
+If there are only two classes, we train ONE model. 
+The C values for the two classes are 10 and 50. 
+
+> predict -b 1 test_file data_file.model output_file
+
+Output probability estimates (for logistic regression only).
+
+
 
 Library Usage
 =============
 
-- Function: lr_model* lr_train(const struct lr_problem *lrprob,
-                const struct lr_parameter *param);
+- Function: model* train(const struct problem *prob,
+                const struct parameter *param);
 
-    This function constructs and returns a logistic regression model
+    This function constructs and returns a linear classification model
     according to the given training data and parameters.
 
-    struct lr_problem describes the problem:
+    struct problem describes the problem:
 
-        struct lr_problem
+        struct problem
         {
             int l, n;
             int *y;
-            struct lr_node **x;
+            struct feature_node **x;
             double bias;
         };
 
@@ -129,7 +176,7 @@ Library Usage
     instance. `n' is the number of feature (including the bias feature
     if bias >= 0). `y' is an array containing the target values. And
     `x' is an array of pointers,
-    each of which points to a sparse representation (array of lr_node) of one
+    each of which points to a sparse representation (array of feature_node) of one
     training vector.
 
     For example, if we have the following training data:
@@ -142,7 +189,7 @@ Library Usage
     2           0       0.1     0       1.4     0.5
     3          -0.1    -0.2     0.1     1.1     0.1
 
-    and bias = 1, then the components of lr_problem are:
+    and bias = 1, then the components of problem are:
 
     l = 5
     n = 6
@@ -155,7 +202,45 @@ Library Usage
          [ ] -> (2,0.1) (4,1.4) (5,0.5) (6,1) (-1,?)
          [ ] -> (1,-0.1) (2,-0.2) (3,0.1) (4,1.1) (5,0.1) (6,1) (-1,?)
 
-- Function: void lr_cross_validation(const lr_problem *prob, const lr_parameter *param, int nr_fold, double *target);
+    struct parameter describes the parameters of a linear classification model:
+
+	struct parameter
+	{
+		int solver_type;
+
+		/* these are for training only */
+		double eps;	        /* stopping criteria */
+		double C;
+		int nr_weight;
+		int *weight_label;
+		double* weight;
+	};
+
+    solver_type can be one of L2_LR, L1_LR, L2LOSS_SVM, but L1_LR is not supported yet.
+
+    L2_LR		L2 logistic regression
+    L1_LR		L1 logistic regression
+    L2LOSS_SVM		L2-loss support vector machines
+
+    C is the cost of constraints violation. (we usually use 1 to 1000)
+    eps is the stopping criterion. (we usually use 0.001).
+
+    nr_weight, weight_label, and weight are used to change the penalty
+    for some classes (If the weight for a class is not changed, it is
+    set to 1). This is useful for training classifier using unbalanced
+    input data or with asymmetric misclassification cost.
+
+    nr_weight is the number of elements in the array weight_label and
+    weight. Each weight[i] corresponds to weight_label[i], meaning that
+    the penalty of class weight_label[i] is scaled by a factor of weight[i].
+
+    If you do not want to change penalty for any of the classes,
+    just set nr_weight to 0.
+
+    *NOTE* To avoid wrong parameters, check_parameter() should be
+    called before train().
+
+- Function: void cross_validation(const problem *prob, const parameter *param, int nr_fold, double *target);
 
     This function conducts cross validation. Data are separated to
     nr_fold folds. Under given parameters, sequentially each fold is
@@ -163,59 +248,68 @@ Library Usage
     labels in the validation process are stored in the array called
     target.
 
-    The format of lr_prob is same as that for lr_train().
+    The format of prob is same as that for train().
 
-- Function: double lr_predict(const lr_model *model, const lr_node *x);
+- Function: int predict(const model *model_, const feature_node *x);
 
     This functions classifies a test vector using the given
     model. The predicted label is returned.
 
-- Function: double lr_predict_probability(const struct lr_model *model,
-            const struct lr_node *x, double* prob_estimates);
+- Function: int predict_values(const struct model *model_,
+            const struct feature_node *x, double* dec_values);
+
+    This function gives nr_classifier decision values in the array
+    dec_values. nr_classifier is 1 if there are two classes, and is
+    the number of classes otherwise. 
+
+    We use one-vs-the rest multi-class strategy. The class with the
+    highest decision values is returned.
+
+- Function: int predict_probability(const struct model *model_,
+            const struct feature_node *x, double* prob_estimates);
 
     This function gives nr_class probability estimates in the array
     prob_estimates. nr_class can be obtained from the function
-    lr_get_nr_class. The class with the highest probability is
-    returned.
+    get_nr_class. The class with the highest probability is
+    returned. Currently, we support only the probability outputs of
+    logistic regression.
 
-    We use one-vs-the rest multi-class strategy.
-
-- Function: int lr_get_nr_feature(const lr_model *model);
+- Function: int get_nr_feature(const model *model_);
 
     The function gives the number of attributes of the model.
 
-- Function: int lr_get_nr_class(const lr_model *model);
+- Function: int get_nr_class(const model *model_);
 
     The function gives the number of classes of the model.
 
-- Function: void lr_get_labels(const lr_model *model, int* label);
+- Function: void get_labels(const model *model_, int* label);
 
     This function outputs the name of labels into an array called label.
 
-- Function: const char *lr_check_parameter(const struct lr_problem *prob,
-            const struct lr_parameter *param);
+- Function: const char *check_parameter(const struct problem *prob,
+            const struct parameter *param);
 
     This function checks whether the parameters are within the feasible
     range of the problem. This function should be called before calling
-    lr_train() and lr_cross_validation(). It returns NULL if the
+    train() and cross_validation(). It returns NULL if the
     parameters are feasible, otherwise an error message is returned.
 	
-- Function: int lr_save_model(const char *model_file_name,
-            const struct lr_model *model);
+- Function: int save_model(const char *model_file_name,
+            const struct model *model_);
 
     This function saves a model to a file; returns 0 on success, or -1
     if an error occurs.
 
-- Function: struct lr_model *lr_load_model(const char *model_file_name);
+- Function: struct model *load_model(const char *model_file_name);
 
     This function returns a pointer to the model read from the file,
     or a null pointer if the model could not be loaded.
 
-- Function: void lr_destroy_model(struct lr_model *model);
+- Function: void destroy_model(struct model *model_);
 
     This function frees the memory used by a model.
 
-- Function: void lr_destroy_param(struct lr_parameter *param);
+- Function: void destroy_param(struct parameter *param);
 
     This function frees the memory used by a parameter set.
 
@@ -225,7 +319,7 @@ Building Windows Binaries
 Windows binaries are in the directory `windows'. To build them via
 Visual C++, use the following steps:
 
-1. Open a dos command box and change to liblr directory. If
+1. Open a dos command box and change to liblinear directory. If
 environment variables of VC++ have not been set, type
 
 "C:\Program Files\Microsoft Visual Studio .NET 2003\Vc7\bin\vcvars32.bat"
@@ -246,12 +340,12 @@ Please check the file README in the directory `matlab'.
 Additional Information
 ======================
 
-If you find LIBLR helpful, please cite it as
+If you find LIBLINEAR helpful, please cite it as
 
 C.-J. Lin, R. C. Weng, and S. S. Keerthi.
-Trust region Newton method for large-scale regularized logistic
+Trust region Newton method for large-scale logistic
 regression. Technical report, 2007. A short version appears
-in ICML 2007. Software available at http://www.csie.ntu.edu.tw/~cjlin/liblr
+in ICML 2007. Software available at http://www.csie.ntu.edu.tw/~cjlin/liblinear
 
 For any questions and comments, please send your email to
 cjlin@csie.ntu.edu.tw

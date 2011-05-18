@@ -2,32 +2,39 @@
 
 MATLABDIR ?= /usr/local/matlab
 CXX ?= g++
-#CXX ?= g++-3.3
+#CXX = g++-3.3
+CC ?= gcc
 CFLAGS = -Wall -O3 -fPIC -I$(MATLABDIR)/extern/include -I..
 
 MEX = $(MATLABDIR)/bin/mex
-MEX_OPTION = CC\=$(CXX) CXX\#$(CXX) CFLAGS\#"$(CFLAGS)" CXXFLAGS\#"$(CFLAGS)"
+MEX_OPTION = CC\#$(CXX) CXX\#$(CXX) CFLAGS\#"$(CFLAGS)" CXXFLAGS\#"$(CFLAGS)"
 # uncomment the following line if you use MATLAB 7.3 (or above) on 64-bit computer
 MEX_OPTION += -largeArrayDims
 MEX_EXT = $(shell $(MATLABDIR)/bin/mexext)
 
-all: lrtrain.$(MEX_EXT) lrpredict.$(MEX_EXT) read_sparse.$(MEX_EXT)
+all: train.$(MEX_EXT) predict.$(MEX_EXT) read_sparse.$(MEX_EXT)
 
-lrtrain.$(MEX_EXT): lrtrain.c ../lr.h lr.o lr_model_matlab.o
-	$(MEX) $(MEX_OPTION) lrtrain.c lr.o lr_model_matlab.o -lm
+train.$(MEX_EXT): train.c ../linear.h tron.o linear.o linear_model_matlab.o ../blas/blas.a
+	$(MEX) $(MEX_OPTION) train.c tron.o linear.o linear_model_matlab.o ../blas/blas.a
 
-lrpredict.$(MEX_EXT): lrpredict.c ../lr.h lr.o lr_model_matlab.o
-	$(MEX) $(MEX_OPTION) lrpredict.c lr.o lr_model_matlab.o -lm
+predict.$(MEX_EXT): predict.c ../linear.h tron.o linear.o linear_model_matlab.o ../blas/blas.a
+	$(MEX) $(MEX_OPTION) predict.c tron.o linear.o linear_model_matlab.o ../blas/blas.a
 
-read_sparse.$(MEX_EXT): read_sparse.c
+read_sparse.$(MEX_EXT):	read_sparse.c
 	$(MEX) $(MEX_OPTION) read_sparse.c
 
-lr_model_matlab.o: lr_model_matlab.c ../lr.h
-	$(CXX) $(CFLAGS) -c lr_model_matlab.c
+linear_model_matlab.o: linear_model_matlab.c ../linear.h
+	$(CXX) $(CFLAGS) -c linear_model_matlab.c
 
-lr.o: ../lr.cpp ../lr.h
-	$(CC) $(CFLAGS) -fPIC -c ../lr.cpp
+linear.o: ../linear.cpp ../linear.h
+	$(CXX) $(CFLAGS) -c ../linear.cpp
+
+tron.o: ../tron.cpp ../tron.h
+	$(CXX) $(CFLAGS) -c ../tron.cpp
+
+../blas/blas.a:
+	cd ../blas; make OPTFLAGS='$(CFLAGS)' CC='$(CC)';
 
 clean:
-	rm -f *~ *.o; rm -f *.mex*; rm -f *.obj
-
+	cd ../blas;	make clean
+	rm -f *~ *.o *.mex* *.obj

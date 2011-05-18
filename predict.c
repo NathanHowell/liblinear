@@ -2,34 +2,42 @@
 #include <ctype.h>
 #include <stdlib.h>
 #include <string.h>
-#include "lr.h"
+#include "linear.h"
 
 char* line;
 int max_line_len = 1024;
-struct lr_node *x;
+struct feature_node *x;
 int max_nr_attr = 64;
 
-struct lr_model* model;
-int predict_probability=0;
+struct model* model_;
+int flag_predict_probability=0;
 
-void predict(FILE *input, FILE *output, struct lr_model* model)
+void do_predict(FILE *input, FILE *output, struct model* model_)
 {
 	int correct = 0;
 	int total = 0;
 
-	int nr_class=lr_get_nr_class(model);
+	int nr_class=get_nr_class(model_);
 	double *prob_estimates=NULL;
 	int j, n;
-	int nr_feature=lr_get_nr_feature(model);
-	if(model->bias>=0)
+	int nr_feature=get_nr_feature(model_);
+	if(model_->bias>=0)
 		n=nr_feature+1;
 	else
 		n=nr_feature;
 
-	if(predict_probability)
+	if(flag_predict_probability)
 	{
-		int *labels=(int *) malloc(nr_class*sizeof(int));
-		lr_get_labels(model,labels);
+		int *labels;
+
+		if(model_->param.solver_type==L2LOSS_SVM)
+		{
+			fprintf(stderr, "probability output for L2LOSS_SVM is not supported yet\n");
+			return;
+		}
+
+		labels=(int *) malloc(nr_class*sizeof(int));
+		get_labels(model_,labels);
 		prob_estimates = (double *) malloc(nr_class*sizeof(double));
 		fprintf(output,"labels");		
 		for(j=0;j<nr_class;j++)
@@ -53,7 +61,7 @@ void predict(FILE *input, FILE *output, struct lr_model* model)
 			if(i>=max_nr_attr-2)	// need one more for index = -1
 			{
 				max_nr_attr *= 2;
-				x = (struct lr_node *) realloc(x,max_nr_attr*sizeof(struct lr_node));
+				x = (struct feature_node *) realloc(x,max_nr_attr*sizeof(struct feature_node));
 			}
 
 			do {
@@ -72,26 +80,26 @@ void predict(FILE *input, FILE *output, struct lr_model* model)
 		}
 
 out2:
-		if(model->bias>=0)
+		if(model_->bias>=0)
 		{
 			x[i].index = n;
-			x[i].value = model->bias;
+			x[i].value = model_->bias;
 			i++;
 		}
 		x[i].index = -1;
 
-		if(predict_probability)
+		if(flag_predict_probability)
 		{
 			int j;
-			predict_label = lr_predict_probability(model,x,prob_estimates);
+			predict_label = predict_probability(model_,x,prob_estimates);
 			fprintf(output,"%d ",predict_label);
-			for(j=0;j<model->nr_class;j++)
+			for(j=0;j<model_->nr_class;j++)
 				fprintf(output,"%g ",prob_estimates[j]);
 			fprintf(output,"\n");
 		}
 		else
 		{
-			predict_label = lr_predict(model,x);
+			predict_label = predict(model_,x);
 			fprintf(output,"%d\n",predict_label);
 		}
 
@@ -100,14 +108,14 @@ out2:
 		++total;
 	}
 	printf("Accuracy = %g%% (%d/%d)\n", (double)correct/total*100,correct,total);
-	if(predict_probability)
+	if(flag_predict_probability)
 		free(prob_estimates);
 }
 
 void exit_with_help()
 {
 	printf(
-	"Usage: lr-predict [options] test_file model_file output_file\n"
+	"Usage: predict [options] test_file model_file output_file\n"
 	"options:\n"
 	"-b probability_estimates: whether to output probability estimates, 0 or 1 (default 0)\n"
 	);
@@ -127,7 +135,7 @@ int main(int argc, char **argv)
 		switch(argv[i-1][1])
 		{
 			case 'b':
-				predict_probability = atoi(argv[i]);
+				flag_predict_probability = atoi(argv[i]);
 				break;
 
 			default:
@@ -153,16 +161,16 @@ int main(int argc, char **argv)
 		exit(1);
 	}
 
-	if((model=lr_load_model(argv[i+1]))==0)
+	if((model_=load_model(argv[i+1]))==0)
 	{
 		fprintf(stderr,"can't open model file %s\n",argv[i+1]);
 		exit(1);
 	}
 
 	line = (char *) malloc(max_line_len*sizeof(char));
-	x = (struct lr_node *) malloc(max_nr_attr*sizeof(struct lr_node));
-	predict(input, output, model);
-	lr_destroy_model(model);
+	x = (struct feature_node *) malloc(max_nr_attr*sizeof(struct feature_node));
+	do_predict(input, output, model_);
+	destroy_model(model_);
 	free(line);
 	free(x);
 	fclose(input);

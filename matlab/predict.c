@@ -1,10 +1,10 @@
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
-#include "lr.h"
+#include "linear.h"
 
 #include "mex.h"
-#include "lr_model_matlab.h"
+#include "linear_model_matlab.h"
 
 #if MX_API_VER < 0x07030000
 typedef int mwIndex;
@@ -14,7 +14,7 @@ typedef int mwIndex;
 
 #define Malloc(type,n) (type *)malloc((n)*sizeof(type))
 
-void read_sparse_instance(const mxArray *prhs, int index, struct lr_node *x, int feature_number, double bias)
+void read_sparse_instance(const mxArray *prhs, int index, struct feature_node *x, int feature_number, double bias)
 {
 	int i, j, low, high;
 	mwIndex *ir, *jc;
@@ -46,21 +46,27 @@ static void fake_answer(mxArray *plhs[])
 	plhs[2] = mxCreateDoubleMatrix(0, 0, mxREAL);
 }
 
-void predict(mxArray *plhs[], const mxArray *prhs[], struct lr_model *model, const int predict_probability)
+void do_predict(mxArray *plhs[], const mxArray *prhs[], struct model *model_, const int predict_probability_flag)
 {
 	int label_vector_row_num, label_vector_col_num;
 	int feature_number, testing_instance_number;
 	int instance_index;
 	double *ptr_instance, *ptr_label, *ptr_predict_label;
-	double *ptr_prob_estimates, *ptr;
-	struct lr_node *x;
+	double *ptr_prob_estimates, *ptr_dec_values, *ptr;
+	struct feature_node *x;
 	mxArray *pplhs[1]; // transposed instance sparse matrix
 
 	int correct = 0;
 	int total = 0;
 
-	int nr_class=lr_get_nr_class(model);
+	int nr_class=get_nr_class(model_);
+	int nr_classifier;
 	double *prob_estimates=NULL;
+
+	if(nr_class==2)
+		nr_classifier=1;
+	else
+		nr_classifier=nr_class;
 
 	// prhs[1] = testing instance matrix
 	feature_number = mxGetN(prhs[1]);
@@ -100,11 +106,15 @@ void predict(mxArray *plhs[], const mxArray *prhs[], struct lr_model *model, con
 	prob_estimates = Malloc(double, nr_class);
 
 	plhs[0] = mxCreateDoubleMatrix(testing_instance_number, 1, mxREAL);
-	plhs[2] = mxCreateDoubleMatrix(testing_instance_number, nr_class, mxREAL);
+	if(predict_probability_flag)
+		plhs[2] = mxCreateDoubleMatrix(testing_instance_number, nr_class, mxREAL);
+	else
+		plhs[2] = mxCreateDoubleMatrix(testing_instance_number, nr_classifier, mxREAL);
 
 	ptr_predict_label = mxGetPr(plhs[0]);
 	ptr_prob_estimates = mxGetPr(plhs[2]);
-	x = Malloc(struct lr_node, feature_number+2);
+	ptr_dec_values = mxGetPr(plhs[2]);
+	x = Malloc(struct feature_node, feature_number+2);
 	for(instance_index=0;instance_index<testing_instance_number;instance_index++)
 	{
 		int i;
@@ -114,7 +124,7 @@ void predict(mxArray *plhs[], const mxArray *prhs[], struct lr_model *model, con
 
 		if(mxIsSparse(prhs[1])) // prhs[1]^T is still sparse
 		{
-			read_sparse_instance(pplhs[0], instance_index, x, feature_number, model->bias);
+			read_sparse_instance(pplhs[0], instance_index, x, feature_number, model_->bias);
 		}
 		else
 		{
@@ -128,10 +138,23 @@ void predict(mxArray *plhs[], const mxArray *prhs[], struct lr_model *model, con
 			x[feature_number+1].index = -1;
 		}
 
-		v = lr_predict_probability(model, x, prob_estimates);
-		ptr_predict_label[instance_index] = v;
-		for(i=0;i<nr_class;i++)
-			ptr_prob_estimates[instance_index + i * testing_instance_number] = prob_estimates[i];
+		if(predict_probability_flag)
+		{
+			v = predict_probability(model_, x, prob_estimates);
+			ptr_predict_label[instance_index] = v;
+			for(i=0;i<nr_class;i++)
+				ptr_prob_estimates[instance_index + i * testing_instance_number] = prob_estimates[i];
+		}
+		else
+		{
+			double *dec_values = Malloc(double, nr_class);
+			v = predict(model_, x);
+			ptr_predict_label[instance_index] = v;
+
+			predict_values(model_, x, dec_values);
+			for(i=0;i<nr_classifier;i++)
+				ptr_dec_values[instance_index + i * testing_instance_number] = dec_values[i];
+		}
 
 		if(v == target)
 			++correct;
@@ -152,8 +175,8 @@ void predict(mxArray *plhs[], const mxArray *prhs[], struct lr_model *model, con
 void exit_with_help()
 {
 	mexPrintf(
-	"Usage: [predicted_label, accuracy, decision_values/prob_estimates] = lrpredict(testing_label_vector, testing_instance_matrix, model, 'liblr_options')\n"
-	"liblr_options:\n"
+	"Usage: [predicted_label, accuracy, decision_values/prob_estimates] = predict(testing_label_vector, testing_instance_matrix, model, 'liblinear_options')\n"
+	"liblinear_options:\n"
 	"-b probability_estimates: whether to predict probability estimates, 0 or 1 (default 0)\n"
 	);
 }
@@ -162,7 +185,7 @@ void mexFunction( int nlhs, mxArray *plhs[],
 		 int nrhs, const mxArray *prhs[] )
 {
 	int prob_estimate_flag = 0;
-	struct lr_model *model;
+	struct model *model_;
 
 	if(nrhs > 4 || nrhs < 3)
 	{
@@ -210,20 +233,27 @@ void mexFunction( int nlhs, mxArray *plhs[],
 			}
 		}
 
-//		model = (struct lr_model *) malloc(sizeof(struct lr_model));
-		model = Malloc(struct lr_model, 1);
-		error_msg = matlab_matrix_to_model(model, prhs[2]);
+		model_ = Malloc(struct model, 1);
+		error_msg = matlab_matrix_to_model(model_, prhs[2]);
 		if(error_msg)
 		{
 			mexPrintf("Error: can't read model: %s\n", error_msg);
-			lr_destroy_model(model);
+			destroy_model(model_);
 			fake_answer(plhs);
 			return;
 		}
 
-		predict(plhs, prhs, model, prob_estimate_flag);
-		// destroy model
-		lr_destroy_model(model);
+		if(prob_estimate_flag)
+		{
+			if(model_->param.solver_type==L2LOSS_SVM)
+			{
+				mexPrintf("probability output for L2LOSS_SVM is not supported yet\n");
+				prob_estimate_flag=0;
+			}
+		}
+		do_predict(plhs, prhs, model_, prob_estimate_flag);
+		// destroy model_
+		destroy_model(model_);
 	}
 	else
 	{

@@ -1,6 +1,6 @@
 #include <stdlib.h>
 #include <string.h>
-#include "lr.h"
+#include "linear.h"
 
 #include "mex.h"
 
@@ -10,9 +10,10 @@ typedef int mwIndex;
 
 #define Malloc(type,n) (type *)malloc((n)*sizeof(type))
 
-#define NUM_OF_RETURN_FIELD 5
+#define NUM_OF_RETURN_FIELD 6
 
 static const char *field_names[] = {
+	"Parameters",
 	"nr_class",
 	"nr_feature",
 	"bias",
@@ -20,7 +21,7 @@ static const char *field_names[] = {
 	"w",
 };
 
-const char *model_to_matlab_structure(mxArray *plhs[], int num_of_feature, struct lr_model *model)
+const char *model_to_matlab_structure(mxArray *plhs[], int num_of_feature, struct model *model_)
 {
 	int i, j;
 	int nr_classifier;
@@ -28,45 +29,51 @@ const char *model_to_matlab_structure(mxArray *plhs[], int num_of_feature, struc
 	mxArray *return_model, **rhs;
 	int out_id = 0;
 	int n;
-	double bias;
 
 	rhs = (mxArray **)mxMalloc(sizeof(mxArray *)*NUM_OF_RETURN_FIELD);
+
+	// Parameters
+	// for now, only solver_type is needed
+	rhs[out_id] = mxCreateDoubleMatrix(1, 1, mxREAL);
+	ptr = mxGetPr(rhs[out_id]);
+	ptr[0] = model_->param.solver_type;
+	out_id++;
 
 	// nr_class
 	rhs[out_id] = mxCreateDoubleMatrix(1, 1, mxREAL);
 	ptr = mxGetPr(rhs[out_id]);
-	ptr[0] = model->nr_class;
+	ptr[0] = model_->nr_class;
 	out_id++;
 
-	if(model->nr_class==2)
+	if(model_->nr_class==2)
 		nr_classifier=1;
 	else
-		nr_classifier=model->nr_class;
+		nr_classifier=model_->nr_class;
 
 	// nr_feature
 	rhs[out_id] = mxCreateDoubleMatrix(1, 1, mxREAL);
 	ptr = mxGetPr(rhs[out_id]);
-	ptr[0] = model->nr_feature;
+	ptr[0] = model_->nr_feature;
 	out_id++;
 
 	// bias
 	rhs[out_id] = mxCreateDoubleMatrix(1, 1, mxREAL);
 	ptr = mxGetPr(rhs[out_id]);
-	ptr[0] = model->bias;
+	ptr[0] = model_->bias;
 	out_id++;
 
-	if(model->bias>=0)
-		n=model->nr_feature+1;
+	if(model_->bias>=0)
+		n=model_->nr_feature+1;
 	else
-		n=model->nr_feature;
+		n=model_->nr_feature;
 
 	// Label
-	if(model->label)
+	if(model_->label)
 	{
-		rhs[out_id] = mxCreateDoubleMatrix(model->nr_class, 1, mxREAL);
+		rhs[out_id] = mxCreateDoubleMatrix(model_->nr_class, 1, mxREAL);
 		ptr = mxGetPr(rhs[out_id]);
-		for(i = 0; i < model->nr_class; i++)
-			ptr[i] = model->label[i];
+		for(i = 0; i < model_->nr_class; i++)
+			ptr[i] = model_->label[i];
 	}
 	else
 		rhs[out_id] = mxCreateDoubleMatrix(0, 0, mxREAL);
@@ -76,7 +83,7 @@ const char *model_to_matlab_structure(mxArray *plhs[], int num_of_feature, struc
 	rhs[out_id] = mxCreateDoubleMatrix(n, nr_classifier, mxREAL);
 	ptr = mxGetPr(rhs[out_id]);
 	for(i=0, j=n*nr_classifier; i<j; i++)
-		ptr[i]=model->w[i];
+		ptr[i]=model_->w[i];
 	out_id++;
 
 	/* Create a struct matrix contains NUM_OF_RETURN_FIELD fields */
@@ -92,7 +99,7 @@ const char *model_to_matlab_structure(mxArray *plhs[], int num_of_feature, struc
 	return NULL;
 }
 
-const char *matlab_matrix_to_model(struct lr_model *model, const mxArray *matlab_struct)
+const char *matlab_matrix_to_model(struct model *model_, const mxArray *matlab_struct)
 {
 	int i, j, num_of_fields;
 	int nr_classifier;
@@ -107,47 +114,52 @@ const char *matlab_matrix_to_model(struct lr_model *model, const mxArray *matlab
 	for(i=0;i<num_of_fields;i++)
 		rhs[i] = mxGetFieldByNumber(matlab_struct, 0, i);
 
-	model->nr_class=0;
+	model_->nr_class=0;
 	nr_classifier=0;
-	model->nr_feature=0;
-	model->w=NULL;
-	model->label=NULL;
+	model_->nr_feature=0;
+	model_->w=NULL;
+	model_->label=NULL;
+
+	// Parameters
+	ptr = mxGetPr(rhs[id]);
+	model_->param.solver_type = (int)ptr[0];
+	id++;
 
 	// nr_class
 	ptr = mxGetPr(rhs[id]);
-	model->nr_class = (int)ptr[0];
+	model_->nr_class = (int)ptr[0];
 	id++;
 
-	if(model->nr_class==2)
+	if(model_->nr_class==2)
 		nr_classifier=1;
 	else
-		nr_classifier=model->nr_class;
+		nr_classifier=model_->nr_class;
 
 	// nr_feature
 	ptr = mxGetPr(rhs[id]);
-	model->nr_feature = (int)ptr[0];
+	model_->nr_feature = (int)ptr[0];
 	id++;
 
 	// bias
 	ptr = mxGetPr(rhs[id]);
-	model->bias = (int)ptr[0];
+	model_->bias = (int)ptr[0];
 	id++;
 
-	if(model->bias>=0)
-		n=model->nr_feature+1;
+	if(model_->bias>=0)
+		n=model_->nr_feature+1;
 	else
-		n=model->nr_feature;
+		n=model_->nr_feature;
 
 	ptr = mxGetPr(rhs[id]);
-	model->label=Malloc(int, model->nr_class);
-	for(i=0; i<model->nr_class; i++)
-		model->label[i]=(int)ptr[i];
+	model_->label=Malloc(int, model_->nr_class);
+	for(i=0; i<model_->nr_class; i++)
+		model_->label[i]=(int)ptr[i];
 	id++;
 
 	ptr = mxGetPr(rhs[id]);
-	model->w=Malloc(double, nr_classifier*n);
+	model_->w=Malloc(double, nr_classifier*n);
 	for(i=0, j=nr_classifier*n; i<j; i++)
-		model->w[i]=ptr[i];
+		model_->w[i]=ptr[i];
 	id++;
 	mxFree(rhs);
 
