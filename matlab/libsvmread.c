@@ -9,8 +9,12 @@
 #if MX_API_VER < 0x07030000
 typedef int mwIndex;
 #endif 
+#ifndef max
 #define max(x,y) (((x)>(y))?(x):(y))
+#endif
+#ifndef min
 #define min(x,y) (((x)<(y))?(x):(y))
+#endif
 
 void exit_with_help()
 {
@@ -125,9 +129,15 @@ void read_problem(const char *filename, mxArray *plhs[])
 
 		readline(fp);
 
-		label = strtok(line," \t");
+		label = strtok(line," \t\n");
+		if(label == NULL)
+		{
+			mexPrintf("Empty line at line %d\n",i+1);
+			fake_answer(plhs);
+			return;
+		}
 		labels[i] = strtod(label,&endptr);
-		if(endptr == label)
+		if(endptr == label || *endptr != '\0')
 		{
 			mexPrintf("Wrong input format at line %d\n",i+1);
 			fake_answer(plhs);

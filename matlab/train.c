@@ -17,6 +17,7 @@ typedef int mwIndex;
 #define INF HUGE_VAL
 
 void print_null(const char *s) {}
+void print_string_matlab(const char *s) {mexPrintf(s);}
 
 void exit_with_help()
 {
@@ -36,11 +37,12 @@ void exit_with_help()
 	"-e epsilon : set tolerance of termination criterion\n"
 	"	-s 0 and 2\n" 
 	"		|f'(w)|_2 <= eps*min(pos,neg)/l*|f'(w0)|_2,\n" 
-	"		where f is the primal function, (default 0.01)\n"
+	"		where f is the primal function and pos/neg are # of\n" 
+	"		positive/negative data (default 0.01)\n"
 	"	-s 1, 3, 4 and 7\n"
 	"		Dual maximal violation <= eps; similar to libsvm (default 0.1)\n"
 	"	-s 5 and 6\n"
-	"		|f'(w)|_inf <= eps*min(pos,neg)/l*|f'(w0)|_inf,\n"
+	"		|f'(w)|_1 <= eps*min(pos,neg)/l*|f'(w0)|_1,\n"
 	"		where f is the primal function (default 0.01)\n"
 	"-B bias : if bias >= 0, instance x becomes [x; bias]; if < 0, no bias term added (default -1)\n"
 	"-wi weight: weights adjust the parameter C of different classes (see README for details)\n"
@@ -86,7 +88,7 @@ int parse_command_line(int nrhs, const mxArray *prhs[], char *model_file_name)
 	int i, argc = 1;
 	char cmd[CMD_LEN];
 	char *argv[CMD_LEN/2];
-	void (*print_func)(const char*) = NULL;	// default printing to stdout
+	void (*print_func)(const char *) = print_string_matlab;	// default printing to matlab display
 
 	// default values
 	param.solver_type = L2R_L2LOSS_SVC_DUAL;

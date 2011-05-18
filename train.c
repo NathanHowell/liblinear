@@ -33,7 +33,7 @@ void exit_with_help()
 	"	-s 1, 3, 4 and 7\n"
 	"		Dual maximal violation <= eps; similar to libsvm (default 0.1)\n"
 	"	-s 5 and 6\n"
-	"		|f'(w)|_inf <= eps*min(pos,neg)/l*|f'(w0)|_inf,\n"
+	"		|f'(w)|_1 <= eps*min(pos,neg)/l*|f'(w0)|_1,\n"
 	"		where f is the primal function (default 0.01)\n"
 	"-B bias : if bias >= 0, instance x becomes [x; bias]; if < 0, no bias term added (default -1)\n"
 	"-wi weight: weights adjust the parameter C of different classes (see README for details)\n"
@@ -286,9 +286,12 @@ void read_problem(const char *filename)
 		inst_max_index = 0; // strtol gives 0 if wrong format
 		readline(fp);
 		prob.x[i] = &x_space[j];
-		label = strtok(line," \t");
+		label = strtok(line," \t\n");
+		if(label == NULL) // empty line
+			exit_input_error(i+1);
+
 		prob.y[i] = (int) strtol(label,&endptr,10);
-		if(endptr == label)
+		if(endptr == label || *endptr != '\0')
 			exit_input_error(i+1);
 
 		while(1)

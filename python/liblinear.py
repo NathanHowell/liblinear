@@ -3,6 +3,7 @@
 from ctypes import *
 from ctypes.util import find_library
 import sys
+import os
 
 # For unix the prefix 'lib' is not considered.
 if find_library('linear'):
@@ -11,13 +12,15 @@ elif find_library('liblinear'):
 	liblinear = CDLL(find_library('liblinear'))
 else:
 	if sys.platform == 'win32':
-		liblinear = CDLL('../windows/liblinear.dll')
+		liblinear = CDLL(os.path.join(os.path.dirname(__file__),\
+				'../windows/liblinear.dll'))
 	else:
-		liblinear = CDLL('../liblinear.so.1')
+		liblinear = CDLL(os.path.join(os.path.dirname(__file__),\
+				'../liblinear.so.1'))
 
 # Construct constants
 SOLVER_TYPE = ['L2R_LR', 'L2R_L2LOSS_SVC_DUAL', 'L2R_L2LOSS_SVC', 'L2R_L1LOSS_SVC_DUAL',\
-		'MCSVM_CS', 'L1R_L2LOSS_SVC', 'L1R_LR']
+		'MCSVM_CS', 'L1R_L2LOSS_SVC', 'L1R_LR', 'L2R_LR_DUAL']
 for i, s in enumerate(SOLVER_TYPE): exec("%s = %d" % (s , i))
 
 PRINT_STRING_FUN = CFUNCTYPE(None, c_char_p)
@@ -182,7 +185,7 @@ class parameter(Structure):
 		if self.eps == float('inf'):
 			if self.solver_type in [L2R_LR, L2R_L2LOSS_SVC]:
 				self.eps = 0.01
-			elif self.solver_type in [L2R_L2LOSS_SVC_DUAL, L2R_L1LOSS_SVC_DUAL, MCSVM_CS]:
+			elif self.solver_type in [L2R_L2LOSS_SVC_DUAL, L2R_L1LOSS_SVC_DUAL, MCSVM_CS, L2R_LR_DUAL]:
 				self.eps = 0.1
 			elif self.solver_type in [L1R_L2LOSS_SVC, L1R_LR]:
 				self.eps = 0.01
