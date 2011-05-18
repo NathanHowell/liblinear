@@ -52,12 +52,12 @@ Example:
         Please choose your compiler for building external interface (MEX) files: 
         Would you like mex to locate installed compilers [y]/n? y
         Select a compiler: 
-        [1] Microsoft Visual C/C++ version 7.1 in C:\Program Files\Microsoft Visual Studio 
+        [1] Microsoft Visual C/C++ 2005 in C:\Program Files\Microsoft Visual Studio 8
         [0] None 
         Compiler: 1
         Please verify your choices: 
-        Compiler: Microsoft Visual C/C++ 7.1 
-        Location: C:\Program Files\Microsoft Visual Studio 
+        Compiler: Microsoft Visual C/C++ 2005
+        Location: C:\Program Files\Microsoft Visual Studio 8
         Are these correct?([y]/n): y
 
         matlab> make
@@ -84,7 +84,7 @@ matlab> model = train(training_label_vector, training_instance_matrix [,'libline
         -liblinear_options:
             A string of training options in the same format as that of LIBLINEAR.
         -col:
-	    if 'col' is set, each column of training_instance_matrix is a data instance. Otherwise each row is a data instance.
+            if 'col' is set, each column of training_instance_matrix is a data instance. Otherwise each row is a data instance.
 
 matlab> [predicted_label, accuracy, decision_values/prob_estimates] = predict(testing_label_vector, testing_instance_matrix, model [, 'liblinear_options', 'col']);
 
@@ -99,7 +99,7 @@ matlab> [predicted_label, accuracy, decision_values/prob_estimates] = predict(te
         -liblinear_options:
             A string of testing options in the same format as that of LIBLINEAR.
         -col:
-	    if 'col' is set, each column of testing_instance_matrix is a data instance. Otherwise each row is a data instance.
+            if 'col' is set, each column of testing_instance_matrix is a data instance. Otherwise each row is a data instance.
 
 Returned Model Structure
 ========================
@@ -114,10 +114,11 @@ nr_feature, bias, Label, w]:
         -bias: If >= 0, we assume one additional feature is added to the end
             of each data instance.
         -Label: label of each class
-        -w: a nr_classifier-by-n matrix for the weights, where n is nr_feature
+        -w: a nr_w-by-n matrix for the weights, where n is nr_feature
             or nr_feature+1 depending on the existence of the bias term.
-            nr_classifier is the number of trained classifiers.
-            It is 1 if nr_class=2, and is nr_class otherwise.
+            nr_w is 1 if nr_class=2 and -s is not 4 (i.e., not
+            multi-class svm by Crammer and Singer). It is
+            nr_class otherwise.
 
 If the '-v' option is specified, cross validation is conducted and the
 returned model is just a scalar: cross-validation accuracy.

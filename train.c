@@ -17,12 +17,13 @@ void exit_with_help()
 	"	1 -- L2-loss support vector machines (dual)\n"	
 	"	2 -- L2-loss support vector machines (primal)\n"
 	"	3 -- L1-loss support vector machines (dual)\n"
+	"	4 -- multi-class support vector machines by Crammer and Singer\n"
 	"-c cost : set the parameter C (default 1)\n"
 	"-e epsilon : set tolerance of termination criterion\n"
 	"	-s 0 and 2\n" 
 	"		|f'(w)|_2 <= eps*min(pos,neg)/l*|f'(w0)|_2,\n" 
 	"		where f is the primal function, (default 0.01)\n"
-	"	-s 1 and 3\n"
+	"	-s 1, 3, and 4\n"
 	"		Dual maximal violation <= eps; similar to libsvm (default 0.1)\n"
 	"-B bias : if bias >= 0, instance x becomes [x; bias]; if < 0, no bias term added (default 1)\n"
 	"-wi weight: weights adjust the parameter C of different classes (see README for details)\n"
@@ -178,7 +179,7 @@ void parse_command_line(int argc, char **argv, char *input_file_name, char *mode
 	{
 		if(param.solver_type == L2_LR || param.solver_type == L2LOSS_SVM)
 			param.eps = 0.01;
-		else if(param.solver_type == L2LOSS_SVM_DUAL || param.solver_type == L1LOSS_SVM_DUAL)
+		else if(param.solver_type == L2LOSS_SVM_DUAL || param.solver_type == L1LOSS_SVM_DUAL || param.solver_type == MCSVM_CS)
 			param.eps = 0.1;
 	}
 }

@@ -65,13 +65,13 @@ void do_predict(mxArray *plhs[], const mxArray *prhs[], struct model *model_, co
 	int total = 0;
 
 	int nr_class=get_nr_class(model_);
-	int nr_classifier;
+	int nr_w;
 	double *prob_estimates=NULL;
 
-	if(nr_class==2)
-		nr_classifier=1;
+	if(nr_class==2 && model_->param.solver_type!=MCSVM_CS)
+		nr_w=1;
 	else
-		nr_classifier=nr_class;
+		nr_w=nr_class;
 
 	// prhs[1] = testing instance matrix
 	feature_number = get_nr_feature(model_);
@@ -130,7 +130,7 @@ void do_predict(mxArray *plhs[], const mxArray *prhs[], struct model *model_, co
 	if(predict_probability_flag)
 		plhs[2] = mxCreateDoubleMatrix(testing_instance_number, nr_class, mxREAL);
 	else
-		plhs[2] = mxCreateDoubleMatrix(testing_instance_number, nr_classifier, mxREAL);
+		plhs[2] = mxCreateDoubleMatrix(testing_instance_number, nr_w, mxREAL);
 
 	ptr_predict_label = mxGetPr(plhs[0]);
 	ptr_prob_estimates = mxGetPr(plhs[2]);
@@ -160,7 +160,7 @@ void do_predict(mxArray *plhs[], const mxArray *prhs[], struct model *model_, co
 			ptr_predict_label[instance_index] = v;
 
 			predict_values(model_, x, dec_values);
-			for(i=0;i<nr_classifier;i++)
+			for(i=0;i<nr_w;i++)
 				ptr_dec_values[instance_index + i * testing_instance_number] = dec_values[i];
 		}
 

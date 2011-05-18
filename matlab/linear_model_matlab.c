@@ -24,7 +24,7 @@ static const char *field_names[] = {
 const char *model_to_matlab_structure(mxArray *plhs[], int num_of_feature, struct model *model_)
 {
 	int i;
-	int nr_classifier;
+	int nr_w;
 	double *ptr;
 	mxArray *return_model, **rhs;
 	int out_id = 0;
@@ -45,10 +45,10 @@ const char *model_to_matlab_structure(mxArray *plhs[], int num_of_feature, struc
 	ptr[0] = model_->nr_class;
 	out_id++;
 
-	if(model_->nr_class==2)
-		nr_classifier=1;
+	if(model_->nr_class==2 && model_->param.solver_type != MCSVM_CS)
+		nr_w=1;
 	else
-		nr_classifier=model_->nr_class;
+		nr_w=model_->nr_class;
 
 	// nr_feature
 	rhs[out_id] = mxCreateDoubleMatrix(1, 1, mxREAL);
@@ -80,9 +80,9 @@ const char *model_to_matlab_structure(mxArray *plhs[], int num_of_feature, struc
 	out_id++;
 
 	// w
-	rhs[out_id] = mxCreateDoubleMatrix(nr_classifier, n, mxREAL);
+	rhs[out_id] = mxCreateDoubleMatrix(nr_w, n, mxREAL);
 	ptr = mxGetPr(rhs[out_id]);
-	for(i = 0; i < n*nr_classifier; i++)
+	for(i = 0; i < n*nr_w; i++)
 		ptr[i]=model_->w[i];
 	out_id++;
 
@@ -102,7 +102,7 @@ const char *model_to_matlab_structure(mxArray *plhs[], int num_of_feature, struc
 const char *matlab_matrix_to_model(struct model *model_, const mxArray *matlab_struct)
 {
 	int i, num_of_fields;
-	int nr_classifier;
+	int nr_w;
 	double *ptr;
 	int id = 0;
 	int n;
@@ -115,7 +115,7 @@ const char *matlab_matrix_to_model(struct model *model_, const mxArray *matlab_s
 		rhs[i] = mxGetFieldByNumber(matlab_struct, 0, i);
 
 	model_->nr_class=0;
-	nr_classifier=0;
+	nr_w=0;
 	model_->nr_feature=0;
 	model_->w=NULL;
 	model_->label=NULL;
@@ -130,10 +130,10 @@ const char *matlab_matrix_to_model(struct model *model_, const mxArray *matlab_s
 	model_->nr_class = (int)ptr[0];
 	id++;
 
-	if(model_->nr_class==2)
-		nr_classifier=1;
+	if(model_->nr_class==2 && model_->param.solver_type != MCSVM_CS)
+		nr_w=1;
 	else
-		nr_classifier=model_->nr_class;
+		nr_w=model_->nr_class;
 
 	// nr_feature
 	ptr = mxGetPr(rhs[id]);
@@ -157,8 +157,8 @@ const char *matlab_matrix_to_model(struct model *model_, const mxArray *matlab_s
 	id++;
 
 	ptr = mxGetPr(rhs[id]);
-	model_->w=Malloc(double, nr_classifier*n);
-	for(i = 0; i < n*nr_classifier; i++)
+	model_->w=Malloc(double, nr_w*n);
+	for(i = 0; i < n*nr_w; i++)
 		model_->w[i]=ptr[i];
 	id++;
 	mxFree(rhs);

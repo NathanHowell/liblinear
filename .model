@@ -1,0 +1,7 @@
+solver_type SPOC_SVM_MULTICLASS
+nr_class 0
+label
+nr_feature 0
+bias 1
+w
+
