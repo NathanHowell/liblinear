@@ -22,20 +22,20 @@ template <class S, class T> inline void clone(T*& dst, S* src, int n)
 #define INF HUGE_VAL
 
 #if 1
-void info(const char *fmt,...)
+static void info(const char *fmt,...)
 {
 	va_list ap;
 	va_start(ap,fmt);
 	vprintf(fmt,ap);
 	va_end(ap);
 }
-void info_flush()
+static void info_flush()
 {
 	fflush(stdout);
 }
 #else
-void info(char *fmt,...) {}
-void info_flush() {}
+static void info(char *fmt,...) {}
+static void info_flush() {}
 #endif
 
 class l2_lr_fun : public function
@@ -1370,9 +1370,6 @@ const char *check_parameter(const problem *prob, const parameter *param)
 		&& param->solver_type != L1LOSS_SVM_DUAL
 		&& param->solver_type != MCSVM_CS)
 		return "unknown solver type";
-
-	//	if(param->solver_type == L1_LR)
-	//		return "sorry! sover_type = 1 (L1_LR) is not supported yet";
 
 	return NULL;
 }

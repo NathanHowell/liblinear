@@ -1,6 +1,6 @@
 CXX ?= g++
 CC ?= gcc
-CFLAGS ?= -Wall -O3 -fPIC
+CFLAGS ?= -Wall -Wconversion -O3 -fPIC
 LIBS ?= blas/blas.a
 #LIBS ?= -lblas
 

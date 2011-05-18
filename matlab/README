@@ -168,10 +168,10 @@ Additional Information
 
 Please cite LIBLINEAR as follows
 
-C.-J. Lin, R. C. Weng, and S. S. Keerthi.
-Trust region Newton method for large-scale regularized logistic
-regression. Technical report, 2007. A short version appears
-in ICML 2007. Software available at http://www.csie.ntu.edu.tw/~cjlin/liblinear
+R.-E. Fan, K.-W. Chang, C.-J. Hsieh, X.-R. Wang, and C.-J. Lin.
+LIBLINEAR: A Library for Large Linear Classification, Journal of
+Machine Learning Research 9(2008), 1871-1874.Software available at
+http://www.csie.ntu.edu.tw/~cjlin/liblinear
 
 For any question, please contact Chih-Jen Lin <cjlin@csie.ntu.edu.tw>.
 

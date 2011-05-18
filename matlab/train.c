@@ -139,8 +139,8 @@ int parse_command_line(int nrhs, const mxArray *prhs[], char *model_file_name)
 				break;
 			case 'w':
 				++param.nr_weight;
-				param.weight_label = (int *)realloc(param.weight_label,sizeof(int)*param.nr_weight);
-				param.weight = (double *)realloc(param.weight,sizeof(double)*param.nr_weight);
+				param.weight_label = (int *) realloc(param.weight_label,sizeof(int)*param.nr_weight);
+				param.weight = (double *) realloc(param.weight,sizeof(double)*param.nr_weight);
 				param.weight_label[param.nr_weight-1] = atoi(&argv[i-1][2]);
 				param.weight[param.nr_weight-1] = atof(argv[i]);
 				break;
@@ -194,8 +194,8 @@ int read_problem_sparse(const mxArray *label_vec, const mxArray *instance_mat)
 	}
 
 	// the number of instance
-	prob.l = mxGetN(instance_mat_col);
-	label_vector_row_num = mxGetM(label_vec);
+	prob.l = (int) mxGetN(instance_mat_col);
+	label_vector_row_num = (int) mxGetM(label_vec);
 
 	if(label_vector_row_num!=prob.l)
 	{
@@ -209,10 +209,10 @@ int read_problem_sparse(const mxArray *label_vec, const mxArray *instance_mat)
 	ir = mxGetIr(instance_mat_col);
 	jc = mxGetJc(instance_mat_col);
 
-	num_samples = mxGetNzmax(instance_mat_col);
+	num_samples = (int) mxGetNzmax(instance_mat_col);
 
 	elements = num_samples + prob.l*2;
-	max_index = mxGetM(instance_mat_col);
+	max_index = (int) mxGetM(instance_mat_col);
 
 	prob.y = Malloc(int, prob.l);
 	prob.x = Malloc(struct feature_node*, prob.l);
@@ -224,11 +224,11 @@ int read_problem_sparse(const mxArray *label_vec, const mxArray *instance_mat)
 	for(i=0;i<prob.l;i++)
 	{
 		prob.x[i] = &x_space[j];
-		prob.y[i] = (int)labels[i];
-		low = jc[i], high = jc[i+1];
+		prob.y[i] = (int) labels[i];
+		low = (int) jc[i], high = (int) jc[i+1];
 		for(k=low;k<high;k++)
 		{
-			x_space[j].index = ir[k]+1;
+			x_space[j].index = (int) ir[k]+1;
 			x_space[j].value = samples[k];
 			j++;
 	 	}
@@ -312,12 +312,10 @@ void mexFunction( int nlhs, mxArray *plhs[],
 		}
 		else
 		{
-			int nr_feat = mxGetM(prhs[1]);
 			const char *error_msg;
-			if(col_format_flag)
-				nr_feat = mxGetN(prhs[1]);
+
 			model_ = train(&prob, &param);
-			error_msg = model_to_matlab_structure(plhs, nr_feat, model_);
+			error_msg = model_to_matlab_structure(plhs, model_);
 			if(error_msg)
 				mexPrintf("Error: can't convert libsvm model to matrix structure: %s\n", error_msg);
 			destroy_model(model_);

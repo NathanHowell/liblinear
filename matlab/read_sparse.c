@@ -1,5 +1,8 @@
 #include <stdio.h>
+#include <string.h>
+#include <stdlib.h>
 #include <ctype.h>
+#include <errno.h>
 
 #include "mex.h"
 
@@ -20,12 +23,35 @@ static void fake_answer(mxArray *plhs[])
 	plhs[1] = mxCreateDoubleMatrix(0, 0, mxREAL);
 }
 
+static char *line;
+static int max_line_len;
+
+static char* readline(FILE *input)
+{
+	int len;
+	
+	if(fgets(line,max_line_len,input) == NULL)
+		return NULL;
+
+	while(strrchr(line,'\n') == NULL)
+	{
+		max_line_len *= 2;
+		line = (char *) realloc(line, max_line_len);
+		len = (int) strlen(line);
+		if(fgets(line+len,max_line_len-len,input) == NULL)
+			break;
+	}
+	return line;
+}
+
 // read in a problem (in svmlight format)
 void read_problem(const char *filename, mxArray *plhs[])
 {
-	int elements, max_index, min_index, i, k;
+	int max_index, min_index, i;
+	long elements, k;
 	FILE *fp = fopen(filename,"r");
 	int l = 0;
+	char *endptr;
 	mwIndex *ir, *jc;
 	double *labels, *samples;
 	
@@ -36,37 +62,43 @@ void read_problem(const char *filename, mxArray *plhs[])
 		return;
 	}
 
+	max_line_len = 1024;
+	line = (char *) malloc(max_line_len*sizeof(char));
+
 	max_index = 0;
 	min_index = 1; // our index starts from 1
 	elements = 0;
-	while(1)
+	while(readline(fp) != NULL)
 	{
-		// label
-		int index;
-		double value;
-		fscanf(fp,"%lf",&value);
-
+		char *idx, *val;
 		// features
-		while(1)
+		int index = 0;
+
+		strtok(line," \t"); // label
+		while (1)
 		{
-			int c;
-			do {
-				c = getc(fp);
-				if(c=='\n') goto out;
-				if(c==EOF) goto eof;
-			} while(isspace(c));
-			ungetc(c,fp);
-			fscanf(fp,"%d:%lf",&index, &value);
-			if (index < min_index)
+			idx = strtok(NULL,":"); // index:value
+			val = strtok(NULL," \t");
+			if(val == NULL)
+				break;
+
+			errno = 0;
+			index = (int) strtol(idx,&endptr,10);
+			if(endptr == idx || errno != 0 || *endptr != '\0' || index <= -1) // precomputed kernel has <index> start from 0
+			{
+				mexPrintf("Wrong input format at line %d\n",l+1);
+				fake_answer(plhs);
+				return;
+			}
+
+			if(index < min_index)
 				min_index = index;
 			elements++;
-		}	
-out:
+		}
 		if(index > max_index)
 			max_index = index;
 		l++;
 	}
-eof:
 	rewind(fp);
 
 	// y
@@ -85,27 +117,45 @@ eof:
 	k=0;
 	for(i=0;i<l;i++)
 	{
+		char *idx, *val, *label;
 		jc[i] = k;
-		fscanf(fp,"%lf",&labels[i]);
 
+		readline(fp);
+
+		label = strtok(line," \t");
+		labels[i] = (int)strtol(label,&endptr,10);
+		if(endptr == label)
+		{
+			mexPrintf("Wrong input format at line %d\n",i+1);
+			fake_answer(plhs);
+			return;
+		}
+
+		// features
 		while(1)
 		{
-			int c, index;
-			do {
-				c = getc(fp);
-				if(c=='\n') goto out2;
-			} while(isspace(c));
-			ungetc(c,fp);
-			fscanf(fp,"%d:%lf",&index,&samples[k]);
-			ir[k] = index - min_index; // precomputed kernel has <index> start from 0
+			idx = strtok(NULL,":");
+			val = strtok(NULL," \t");
+			if(val == NULL)
+				break;
+
+			ir[k] = (mwIndex) (strtol(idx,&endptr,10) - min_index); // precomputed kernel has <index> start from 0
+
+			errno = 0;
+			samples[k] = strtod(val,&endptr);
+			if (endptr == val || errno != 0 || (*endptr != '\0' && !isspace(*endptr)))
+			{
+				mexPrintf("Wrong input format at line %d\n",i+1);
+				fake_answer(plhs);
+				return;
+			}
 			++k;
-		}	
-out2:
-		;
+		}
 	}
 	jc[l] = k;
 
 	fclose(fp);
+	free(line);
 
 	{
 		mxArray *rhs[1], *lhs[1];
@@ -113,6 +163,7 @@ out2:
 		if(mexCallMATLAB(1, lhs, 1, rhs, "transpose"))
 		{
 			mexPrintf("Error: cannot transpose problem\n");
+			fake_answer(plhs);
 			return;
 		}
 		plhs[1] = lhs[0];
@@ -143,3 +194,4 @@ void mexFunction( int nlhs, mxArray *plhs[],
 		return;
 	}
 }
+

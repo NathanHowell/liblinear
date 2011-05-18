@@ -2,15 +2,41 @@
 #include <ctype.h>
 #include <stdlib.h>
 #include <string.h>
+#include <errno.h>
 #include "linear.h"
 
-char* line;
-int max_line_len = 1024;
 struct feature_node *x;
 int max_nr_attr = 64;
 
 struct model* model_;
 int flag_predict_probability=0;
+
+void exit_input_error(int line_num)
+{
+	fprintf(stderr,"Wrong input format at line %d\n", line_num);
+	exit(1);
+}
+
+static char *line;
+static int max_line_len;
+
+static char* readline(FILE *input)
+{
+	int len;
+	
+	if(fgets(line,max_line_len,input) == NULL)
+		return NULL;
+
+	while(strrchr(line,'\n') == NULL)
+	{
+		max_line_len *= 2;
+		line = (char *) realloc(line,max_line_len);
+		len = (int) strlen(line);
+		if(fgets(line+len,max_line_len-len,input) == NULL)
+			break;
+	}
+	return line;
+}
 
 void do_predict(FILE *input, FILE *output, struct model* model_)
 {
@@ -33,7 +59,7 @@ void do_predict(FILE *input, FILE *output, struct model* model_)
 		if(model_->param.solver_type!=L2_LR)
 		{
 			fprintf(stderr, "probability output is only supported for logistic regression\n");
-			return;
+			exit(1);
 		}
 
 		labels=(int *) malloc(nr_class*sizeof(int));
@@ -45,16 +71,19 @@ void do_predict(FILE *input, FILE *output, struct model* model_)
 		fprintf(output,"\n");
 		free(labels);
 	}
-	while(1)
+
+	max_line_len = 1024;
+	line = (char *)malloc(max_line_len*sizeof(char));
+	while(readline(input) != NULL)
 	{
 		int i = 0;
-		int c;
-		double target;
 		int target_label, predict_label;
+		char *idx, *val, *label, *endptr;
 
-		if (fscanf(input,"%lf",&target)==EOF)
-			break;
-		target_label=(int)target;
+		label = strtok(line," \t");
+		target_label = (int) strtol(label,&endptr,10);
+		if(endptr == label)
+			exit_input_error(total+1);
 
 		while(1)
 		{
@@ -64,22 +93,26 @@ void do_predict(FILE *input, FILE *output, struct model* model_)
 				x = (struct feature_node *) realloc(x,max_nr_attr*sizeof(struct feature_node));
 			}
 
-			do {
-				c = getc(input);
-				if(c=='\n' || c==EOF) goto out2;
-			} while(isspace(c));
-			ungetc(c,input);
-			if (fscanf(input,"%d:%lf",&x[i].index,&x[i].value) < 2)
-			{
-				fprintf(stderr,"Wrong input format at line %d\n", total+1);
-				exit(1);
-			}
+			idx = strtok(NULL,":");
+			val = strtok(NULL," \t");
+
+			if(val == NULL)
+				break;
+			errno = 0;
+			x[i].index = (int) strtol(idx,&endptr,10);
+			if(endptr == idx || errno != 0 || *endptr != '\0' || x[i].index <= 0)
+				exit_input_error(total+1);
+
+			errno = 0;
+			x[i].value = strtod(val,&endptr);
+			if(endptr == val || errno != 0 || (*endptr != '\0' && !isspace(*endptr)))
+				exit_input_error(total+1);
+
 			// feature indices larger than those in training are not used
-			if(x[i].index<=nr_feature)
+			if(x[i].index <= nr_feature)
 				++i;
 		}
 
-out2:
 		if(model_->bias>=0)
 		{
 			x[i].index = n;
@@ -107,7 +140,7 @@ out2:
 			++correct;
 		++total;
 	}
-	printf("Accuracy = %g%% (%d/%d)\n", (double)correct/total*100,correct,total);
+	printf("Accuracy = %g%% (%d/%d)\n",(double) correct/total*100,correct,total);
 	if(flag_predict_probability)
 		free(prob_estimates);
 }
@@ -167,7 +200,6 @@ int main(int argc, char **argv)
 		exit(1);
 	}
 
-	line = (char *) malloc(max_line_len*sizeof(char));
 	x = (struct feature_node *) malloc(max_nr_attr*sizeof(struct feature_node));
 	do_predict(input, output, model_);
 	destroy_model(model_);

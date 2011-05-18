@@ -28,10 +28,10 @@ void read_sparse_instance(const mxArray *prhs, int index, struct feature_node *x
 
 	// each column is one instance
 	j = 0;
-	low = jc[index], high = jc[index+1];
-	for(i=low; i<high && (int)(ir[i])<feature_number; i++)
+	low = (int) jc[index], high = (int) jc[index+1];
+	for(i=low; i<high && (int) (ir[i])<feature_number; i++)
 	{
-		x[j].index = ir[i]+1;
+		x[j].index = (int) ir[i]+1;
 		x[j].value = samples[i];
 		j++;
 	}
@@ -75,15 +75,15 @@ void do_predict(mxArray *plhs[], const mxArray *prhs[], struct model *model_, co
 
 	// prhs[1] = testing instance matrix
 	feature_number = get_nr_feature(model_);
-	testing_instance_number = mxGetM(prhs[1]);
+	testing_instance_number = (int) mxGetM(prhs[1]);
 	if(col_format_flag)
 	{
-		feature_number = mxGetM(prhs[1]);
-		testing_instance_number = mxGetN(prhs[1]);
+		feature_number = (int) mxGetM(prhs[1]);
+		testing_instance_number = (int) mxGetN(prhs[1]);
 	}
 
-	label_vector_row_num = mxGetM(prhs[0]);
-	label_vector_col_num = mxGetN(prhs[0]);
+	label_vector_row_num = (int) mxGetM(prhs[0]);
+	label_vector_col_num = (int) mxGetN(prhs[0]);
 
 	if(label_vector_row_num!=testing_instance_number)
 	{
@@ -168,12 +168,12 @@ void do_predict(mxArray *plhs[], const mxArray *prhs[], struct model *model_, co
 			++correct;
 		++total;
 	}
-	mexPrintf("Accuracy = %g%% (%d/%d)\n", (double)correct/total*100,correct,total);
+	mexPrintf("Accuracy = %g%% (%d/%d)\n", (double) correct/total*100,correct,total);
 
 	// return accuracy, mean squared error, squared correlation coefficient
 	plhs[1] = mxCreateDoubleMatrix(1, 1, mxREAL);
 	ptr = mxGetPr(plhs[1]);
-	ptr[0] = (double)correct/total*100;
+	ptr[0] = (double) correct/total*100;
 
 	free(x);
 	if(prob_estimates != NULL)

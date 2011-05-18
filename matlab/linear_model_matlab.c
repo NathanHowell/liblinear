@@ -21,7 +21,7 @@ static const char *field_names[] = {
 	"w",
 };
 
-const char *model_to_matlab_structure(mxArray *plhs[], int num_of_feature, struct model *model_)
+const char *model_to_matlab_structure(mxArray *plhs[], struct model *model_)
 {
 	int i;
 	int nr_w;

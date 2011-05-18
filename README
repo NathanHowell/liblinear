@@ -41,7 +41,8 @@ See the section ``Installation'' for installing LIBLINEAR.
 After installation, there are programs `train' and `predict' for
 training and testing, respectively.
 
-About the data format, please check the README file of LIBSVM.
+About the data format, please check the README file of LIBSVM. Note
+that feature index must start from 1 (but not 0).
 
 A sample classification data included in this package is `heart_scale'.
 
@@ -268,8 +269,8 @@ Library Usage
     L1LOSS_SVM_DUAL     L1-loss support vector machines (dual)  
     MCSVM_CS multi-class support vector machines by Crammer and Singer        
 
-    C is the cost of constraints violation. (we usually use 1 to 1000)
-    eps is the stopping criterion. (we usually use 0.01).
+    C is the cost of constraints violation. 
+    eps is the stopping criterion. 
 
     nr_weight, weight_label, and weight are used to change the penalty
     for some classes (If the weight for a class is not changed, it is
@@ -391,7 +392,7 @@ If you find LIBLINEAR helpful, please cite it as
 
 R.-E. Fan, K.-W. Chang, C.-J. Hsieh, X.-R. Wang, and C.-J. Lin.
 LIBLINEAR: A Library for Large Linear Classification, Journal of
-Machine Learning Research, 2008. Software available at
+Machine Learning Research 9(2008), 1871-1874.Software available at
 http://www.csie.ntu.edu.tw/~cjlin/liblinear
 
 For any questions and comments, please send your email to

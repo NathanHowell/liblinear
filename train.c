@@ -3,6 +3,7 @@
 #include <stdlib.h>
 #include <string.h>
 #include <ctype.h>
+#include <errno.h>
 #include "linear.h"
 #define Malloc(type,n) (type *)malloc((n)*sizeof(type))
 #define INF HUGE_VAL
@@ -30,6 +31,33 @@ void exit_with_help()
 	"-v n: n-fold cross validation mode\n"
 	);
 	exit(1);
+}
+
+void exit_input_error(int line_num)
+{
+	fprintf(stderr,"Wrong input format at line %d\n", line_num);
+	exit(1);
+}
+
+static char *line;
+static int max_line_len;
+
+static char* readline(FILE *input)
+{
+	int len;
+	
+	if(fgets(line,max_line_len,input) == NULL)
+		return NULL;
+
+	while(strrchr(line,'\n') == NULL)
+	{
+		max_line_len *= 2;
+		line = (char *) realloc(line,max_line_len);
+		len = (int) strlen(line);
+		if(fgets(line+len,max_line_len-len,input) == NULL)
+			break;
+	}
+	return line;
 }
 
 void parse_command_line(int argc, char **argv, char *input_file_name, char *model_file_name);
@@ -134,8 +162,8 @@ void parse_command_line(int argc, char **argv, char *input_file_name, char *mode
 
 			case 'w':
 				++param.nr_weight;
-				param.weight_label = (int *)realloc(param.weight_label,sizeof(int)*param.nr_weight);
-				param.weight = (double *)realloc(param.weight,sizeof(double)*param.nr_weight);
+				param.weight_label = (int *) realloc(param.weight_label,sizeof(int)*param.nr_weight);
+				param.weight = (double *) realloc(param.weight,sizeof(double)*param.nr_weight);
 				param.weight_label[param.nr_weight-1] = atoi(&argv[i-1][2]);
 				param.weight[param.nr_weight-1] = atof(argv[i]);
 				break;
@@ -187,8 +215,11 @@ void parse_command_line(int argc, char **argv, char *input_file_name, char *mode
 // read in a problem (in libsvm format)
 void read_problem(const char *filename)
 {
-	int elements, max_index, i, j;
+	int max_index, i;
+	long elements, j;
 	FILE *fp = fopen(filename,"r");
+	char *endptr;
+	char *idx, *val, *label;
 
 	if(fp == NULL)
 	{
@@ -198,73 +229,73 @@ void read_problem(const char *filename)
 
 	prob.l = 0;
 	elements = 0;
-	while(1)
+	max_line_len = 1024;
+	line = Malloc(char,max_line_len);
+	while(readline(fp)!=NULL)
 	{
-		int c = fgetc(fp);
-		switch(c)
+		char *p = strtok(line," \t"); // label
+
+		// features
+		while(1)
 		{
-			case '\n':
-				++prob.l;
-				// fall through,
-				// count the '-1' element
-			case ':':
-				++elements;
+			p = strtok(NULL," \t");
+			if(p == NULL || *p == '\n')
 				break;
-			case EOF:
-				goto out;
-			default:
-				;
+			elements++;
 		}
+		elements++;
+		prob.l++;
 	}
-out:
 	rewind(fp);
 
 	prob.bias=bias;
 
 	prob.y = Malloc(int,prob.l);
-	prob.x = Malloc(struct feature_node *, prob.l);
-	x_space = Malloc(struct feature_node, elements+prob.l);
+	prob.x = Malloc(struct feature_node *,prob.l);
+	x_space = Malloc(struct feature_node,elements+prob.l);
 
 	max_index = 0;
 	j=0;
 	for(i=0;i<prob.l;i++)
 	{
-		double label;
+		readline(fp);
 		prob.x[i] = &x_space[j];
-		fscanf(fp,"%lf",&label);
-		prob.y[i] = (int)label;
+		label = strtok(line," \t");
+		prob.y[i] = (int) strtol(label,&endptr,10);
+		if(endptr == label)
+			exit_input_error(i+1);
 
 		while(1)
 		{
-			int c;
-			do {
-				c = getc(fp);
-				if(c=='\n') goto out2;
-			} while(isspace(c));
-			ungetc(c,fp);
-			if (fscanf(fp,"%d:%lf",&(x_space[j].index),&(x_space[j].value)) < 2)
-			{
-				fprintf(stderr,"Wrong input format at line %d\n", i+1);
-				exit(1);
-			}
-			if (x_space[j].index<=0)
-			{
-				fprintf(stderr,"Error: index <=0\n");
-				exit(1);
-			}
+			idx = strtok(NULL,":");
+			val = strtok(NULL," \t");
+
+			if(val == NULL)
+				break;
+
+			errno = 0;
+			x_space[j].index = (int) strtol(idx,&endptr,10);
+			if(endptr == idx || errno != 0 || *endptr != '\0' || x_space[j].index <= 0)
+				exit_input_error(i+1);
+
+			errno = 0;
+			x_space[j].value = strtod(val,&endptr);
+			if(endptr == val || errno != 0 || (*endptr != '\0' && !isspace(*endptr)))
+				exit_input_error(i+1);
+
 			++j;
 		}
-out2:
-		if(j>=1 && x_space[j-1].index > max_index)
+
+		if(j >= 1 && x_space[j-1].index > max_index)
 			max_index = x_space[j-1].index;
 
-		if(prob.bias>=0)
+		if(prob.bias >= 0)
 			x_space[j++].value = prob.bias;
 
 		x_space[j++].index = -1;
 	}
 
-	if(prob.bias>=0)
+	if(prob.bias >= 0)
 	{
 		prob.n=max_index+1;
 		for(i=1;i<prob.l;i++)
