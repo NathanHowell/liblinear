@@ -15,7 +15,7 @@ Table of Contents
 - Library Usage
 - Building Windows Binaries
 - Additional Information
-- MATLAB interface
+- MATLAB/OCTAVE interface
 
 When to use LIBLINEAR but not LIBSVM
 ====================================
@@ -90,28 +90,27 @@ options:
 		|f'(w)|_2 <= eps*min(pos,neg)/l*|f'(w0)|_2, 
 		where f is the primal function, (default 0.01)
 	-s 1 and 3
-		|min(max(alpha_i - G_i,0),C)-alpha_i|<= eps, 
-		where G is the gradient of the dual, (default 0.1)
+		Dual maximal violation <= eps; similar to libsvm (default 0.1)
 -B bias : if bias >= 0, instance x becomes [x; bias]; if < 0, no bias term added (default 1)
 -wi weight: weights adjust the parameter C of different classes (see README for details)
 -v n: n-fold cross validation mode
 
 Formulations:
 
-For L2-regularized logistic regression, we solve
+For L2-regularized logistic regression (-s 0), we solve
 
 min_w w^Tw/2 + C \sum log(1 + exp(-y_i w^Tx_i))
 
-For L2-loss SVM, we solve
-
-min_w w^Tw/2 + C \sum max(0, 1- y_i w^Tx_i)^2
-
-For L2-loss SVM dual, we solve
+For L2-loss SVM dual (-s 1), we solve
 
 min_alpha  0.5(alpha^T (Q + I/2/C) alpha) - e^T alpha 
     s.t.   0 <= alpha_i,
 
-For L1-loss SVM dual, we solve
+For L2-loss SVM (-s 2), we solve
+
+min_w w^Tw/2 + C \sum max(0, 1- y_i w^Tx_i)^2
+
+For L1-loss SVM dual (-s 3), we solve
 
 min_alpha  0.5(alpha^T Q alpha) - e^T alpha 
     s.t.   0 <= alpha_i <= C,
@@ -120,7 +119,10 @@ where
 
 Q is a matrix with Q_ij = y_i y_j x_i^T x_j.
 
-If bias >= 0, w becomes [w; w_{n+1}] and x becomes [x; bias].
+If bias >= 0, w becomes [w; w_{n+1}] and x becomes [x; bias].  
+
+The primal-dual relationship implies that -s 1 and -s 2 gives the same
+model.
 
 We implement 1-vs-the rest multi-class strategy. In training i
 vs. non_i, their C parameters are (weight from -wi)*C and C,
@@ -350,8 +352,8 @@ where it is installed.
 nmake -f Makefile.win clean all
 
 
-MATLAB Interface
-================
+MATLAB/OCTEVE Interface
+=======================
 
 Please check the file README in the directory `matlab'.
 

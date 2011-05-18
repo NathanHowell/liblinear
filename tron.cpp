@@ -119,7 +119,7 @@ void TRON::tron(double *w)
 		}
 		if (f < -1.0e+32)
 		{
-			printf("warning: f < 1.0e-32\n");
+			printf("warning: f < -1.0e+32\n");
 			break;
 		}
 		if (fabs(actred) <= 0 && prered <= 0)

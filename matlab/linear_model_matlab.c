@@ -82,8 +82,9 @@ const char *model_to_matlab_structure(mxArray *plhs[], int num_of_feature, struc
 	// w
 	rhs[out_id] = mxCreateDoubleMatrix(n, nr_classifier, mxREAL);
 	ptr = mxGetPr(rhs[out_id]);
-	for(i=0, j=n*nr_classifier; i<j; i++)
-		ptr[i]=model_->w[i];
+	for(i=0; i<nr_classifier; i++)
+		for(j=0; j<n; j++)
+			ptr[i*nr_classifier+j]=model_->w[j*nr_classifier+i];
 	out_id++;
 
 	/* Create a struct matrix contains NUM_OF_RETURN_FIELD fields */
@@ -158,8 +159,9 @@ const char *matlab_matrix_to_model(struct model *model_, const mxArray *matlab_s
 
 	ptr = mxGetPr(rhs[id]);
 	model_->w=Malloc(double, nr_classifier*n);
-	for(i=0, j=nr_classifier*n; i<j; i++)
-		model_->w[i]=ptr[i];
+	for(i=0; i<nr_classifier; i++)
+		for(j=0; j<n; j++)
+			model_->w[j*nr_classifier+i]=ptr[i*nr_classifier+j];
 	id++;
 	mxFree(rhs);
 

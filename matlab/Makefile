@@ -12,7 +12,22 @@ MEX_OPTION = CC\#$(CXX) CXX\#$(CXX) CFLAGS\#"$(CFLAGS)" CXXFLAGS\#"$(CFLAGS)"
 MEX_OPTION += -largeArrayDims
 MEX_EXT = $(shell $(MATLABDIR)/bin/mexext)
 
-all: train.$(MEX_EXT) predict.$(MEX_EXT) read_sparse.$(MEX_EXT)
+OCTAVEDIR ?= /usr/include/octave
+OCTAVE_MEX = env CC=$(CXX) mkoctfile
+OCTAVE_MEX_OPTION = --mex
+OCTAVE_MEX_EXT = mex
+OCTAVE_CFLAGS = -Wall -O3 -fPIC -I$(OCTAVEDIR) -I..
+
+all:	matlab
+
+matlab:	binary
+
+octave:
+	@make MEX="$(OCTAVE_MEX)" MEX_OPTION="$(OCTAVE_MEX_OPTION)" \
+	MEX_EXT="$(OCTAVE_MEX_EXT)" CFLAGS="$(OCTAVE_CFLAGS)" \
+	binary
+
+binary: train.$(MEX_EXT) predict.$(MEX_EXT) read_sparse.$(MEX_EXT)
 
 train.$(MEX_EXT): train.c ../linear.h tron.o linear.o linear_model_matlab.o ../blas/blas.a
 	$(MEX) $(MEX_OPTION) train.c tron.o linear.o linear_model_matlab.o ../blas/blas.a

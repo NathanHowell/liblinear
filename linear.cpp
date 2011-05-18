@@ -446,8 +446,8 @@ static void solve_linear_c_svc(
 
 	while (iter < max_iter)
 	{
-		PGmax_new = 0;
-		PGmin_new = 0;
+		PGmax_new = -INF;
+		PGmin_new = INF;
 
 		for (i=0; i<active_size; i++)
 		{
@@ -491,10 +491,7 @@ static void solve_linear_c_svc(
 					continue;
 				}
 				else if (G < 0)
-				{
 					PG = G;
-					PGmin_new = min(PGmin_new, PG);
-				}
 			}
 			else if (alpha[i] == C)
 			{
@@ -506,18 +503,13 @@ static void solve_linear_c_svc(
 					continue;
 				}
 				else if (G > 0)
-				{
 					PG = G;
-					PGmax_new = max(PGmax_new, PG);
-				}
 			}
 			else
-			{
 				PG = G;
-				PGmax_new = max(PGmax_new, PG);
-				PGmin_new = min(PGmin_new, PG);
 
-			}
+			PGmax_new = max(PGmax_new, PG);
+			PGmin_new = min(PGmin_new, PG);
 
 			if(fabs(PG) > 1.0e-12)
 			{
@@ -555,9 +547,9 @@ static void solve_linear_c_svc(
 		}
 		PGmax_old = PGmax_new;
 		PGmin_old = PGmin_new;
-		if (PGmax_old == 0)
+		if (PGmax_old <= 0)
 			PGmax_old = INF;
-		if (PGmin_old == 0)
+		if (PGmin_old >= 0)
 			PGmin_old = -INF;
 	}
 
@@ -767,6 +759,7 @@ model* train(const problem *prob, const parameter *param)
 	else
 	{
 		model_->w=Malloc(double, n*nr_class);
+		double *w=Malloc(double, n);
 		for(i=0;i<nr_class;i++)
 		{
 			int si = start[i];
@@ -780,8 +773,12 @@ model* train(const problem *prob, const parameter *param)
 			for(; k<sub_prob.l; k++)
 				sub_prob.y[k] = -1;
 
-			train_one(&sub_prob, param, &model_->w[i*n], weighted_C[i], param->C);
+			train_one(&sub_prob, param, w, weighted_C[i], param->C);
+
+			for(int j=0;j<n;j++)
+				model_->w[j*nr_class+i] = w[j];
 		}
+		free(w);
 	}
 
 	free(x);
@@ -845,7 +842,7 @@ int save_model(const char *model_file_name, const struct model *model_)
 	{
 		int j;
 		for(j=0; j<nr_classifier; j++)
-			fprintf(fp, "%.16g ", model_->w[j*n+i]);
+			fprintf(fp, "%.16g ", model_->w[i*nr_classifier+j]);
 		fprintf(fp, "\n");
 	}
 
@@ -943,7 +940,7 @@ struct model *load_model(const char *model_file_name)
 	{
 		int j;
 		for(j=0; j<nr_classifier; j++)
-			fscanf(fp, "%lf ", &model_->w[j*n+i]);
+			fscanf(fp, "%lf ", &model_->w[i*nr_classifier+j]);
 		fscanf(fp, "\n");
 	}
 	if (ferror(fp) != 0 || fclose(fp) != 0) return NULL;
@@ -967,18 +964,16 @@ int predict_values(const struct model *model_, const struct feature_node *x, dou
 		nr_classifier = 1;
 	else
 		nr_classifier = nr_class;
-	for(i=0;i<nr_classifier;i++)
-	{
-		const feature_node *lx=x;
-		double wtx=0;
-		for(; (idx=lx->index)!=-1; lx++)
-		{
-			// the dimension of testing data may exceed that of training
-			if(idx<=n)
-				wtx += w[i*n+idx-1]*lx->value;
-		}
 
-		dec_values[i] = wtx;
+	const feature_node *lx=x;
+	for(i=0;i<nr_classifier;i++)
+		dec_values[i] = 0;
+	for(; (idx=lx->index)!=-1; lx++)
+	{
+		// the dimension of testing data may exceed that of training
+		if(idx<=n)
+			for(i=0;i<nr_classifier;i++)
+				dec_values[i] += w[(idx-1)*nr_classifier+i]*lx->value;
 	}
 
 	if(nr_class==2)

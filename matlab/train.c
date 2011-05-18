@@ -32,8 +32,7 @@ void exit_with_help()
 	"		|f'(w)|_2 <= eps*min(pos,neg)/l*|f'(w0)|_2,\n" 
 	"		where f is the primal function, (default 0.01)\n"
 	"	-s 1 and 3\n"
-	"		|min(max(alpha_i - G_i,0),C)-alpha_i|<= eps,\n"
-	"		where G is the gradient of the dual, (default 0.1)\n"
+	"		Dual maximal violation <= eps; similar to libsvm (default 0.1)\n"
 	"-B bias : if bias >= 0, instance x becomes [x; bias]; if < 0, no bias term added (default 1)\n"
 	"-wi weight: weights adjust the parameter C of different classes (see README for details)\n"
 	"-v n: n-fold cross validation mode\n"
@@ -50,7 +49,7 @@ struct feature_node *x_space;
 int cross_validation_flag;
 int col_format_flag;
 int nr_fold;
-double bias=1.;
+double bias;
 
 double do_cross_validation()
 {
@@ -87,6 +86,7 @@ int parse_command_line(int nrhs, const mxArray *prhs[], char *model_file_name)
 	param.weight = NULL;
 	cross_validation_flag = 0;
 	col_format_flag = 0;
+	bias = 1;
 
 	if(nrhs <= 1)
 		return 1;
@@ -255,13 +255,20 @@ void mexFunction( int nlhs, mxArray *plhs[],
 {
 	const char *error_msg;
 	// fix random seed to have same results for each run
-	// (for cross validation and probability estimation)
+	// (for cross validation)
 	srand(1);
 
 	// Transform the input Matrix to libsvm format
 	if(nrhs > 0 && nrhs < 5)
 	{
 		int err=0;
+
+		if(!mxIsDouble(prhs[0]) || !mxIsDouble(prhs[1])) {
+			mexPrintf("Error: label vector and instance matrix must be double\n");
+			fake_answer(plhs);
+			return;
+		}
+
 		if(parse_command_line(nrhs, prhs, NULL))
 		{
 			exit_with_help();

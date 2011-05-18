@@ -35,9 +35,12 @@ void read_sparse_instance(const mxArray *prhs, int index, struct feature_node *x
 		x[j].value = samples[i];
 		j++;
 	}
-	x[j].index = feature_number+1;
-	x[j].value = bias;
-	j++;
+	if(bias>=0)
+	{
+		x[j].index = feature_number+1;
+		x[j].value = bias;
+		j++;
+	}
 	x[j].index = -1;
 }
 
@@ -71,7 +74,7 @@ void do_predict(mxArray *plhs[], const mxArray *prhs[], struct model *model_, co
 		nr_classifier=nr_class;
 
 	// prhs[1] = testing instance matrix
-	feature_number = mxGetN(prhs[1]);
+	feature_number = get_nr_feature(model_);
 	testing_instance_number = mxGetM(prhs[1]);
 	if(col_format_flag)
 	{
@@ -209,6 +212,12 @@ void mexFunction( int nlhs, mxArray *plhs[],
 		{			
 			col_format_flag = 1;
 		}
+	}
+
+	if(!mxIsDouble(prhs[0]) || !mxIsDouble(prhs[1])) {
+		mexPrintf("Error: label vector and instance matrix must be double\n");
+		fake_answer(plhs);
+		return;
 	}
 
 	if(mxIsStruct(prhs[2]))
