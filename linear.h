@@ -39,7 +39,7 @@ struct model
 	int nr_class;		/* number of classes */
 	int nr_feature;
 	double *w;
-	int *label;		/* label of each class (label[n]) */
+	int *label;		/* label of each class */
 	double bias;
 };
 
@@ -60,6 +60,7 @@ void get_labels(const struct model *model_, int* label);
 void destroy_model(struct model *model_);
 void destroy_param(struct parameter *param);
 const char *check_parameter(const struct problem *prob, const struct parameter *param);
+extern void (*liblinear_print_string) (const char *);
 
 #ifdef __cplusplus
 }

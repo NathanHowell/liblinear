@@ -2,7 +2,7 @@
 
 int dscal_(int *n, double *sa, double *sx, int *incx)
 {
-  long i, m, nincx, nn, iincx;
+  long int i, m, nincx, nn, iincx;
   double ssa;
 
   /* scales a vector by a constant.   

@@ -3,7 +3,7 @@
 int daxpy_(int *n, double *sa, double *sx, int *incx, double *sy,
            int *incy)
 {
-  long i, m, ix, iy, nn, iincx, iincy;
+  long int i, m, ix, iy, nn, iincx, iincy;
   register double ssa;
 
   /* constant times a vector plus a vector.   

@@ -27,7 +27,7 @@ octave:
 	MEX_EXT="$(OCTAVE_MEX_EXT)" CFLAGS="$(OCTAVE_CFLAGS)" \
 	binary
 
-binary: train.$(MEX_EXT) predict.$(MEX_EXT) read_sparse.$(MEX_EXT)
+binary: train.$(MEX_EXT) predict.$(MEX_EXT) libsvmread.$(MEX_EXT) libsvmwrite.$(MEX_EXT)
 
 train.$(MEX_EXT): train.c ../linear.h tron.o linear.o linear_model_matlab.o ../blas/blas.a
 	$(MEX) $(MEX_OPTION) train.c tron.o linear.o linear_model_matlab.o ../blas/blas.a
@@ -35,8 +35,11 @@ train.$(MEX_EXT): train.c ../linear.h tron.o linear.o linear_model_matlab.o ../b
 predict.$(MEX_EXT): predict.c ../linear.h tron.o linear.o linear_model_matlab.o ../blas/blas.a
 	$(MEX) $(MEX_OPTION) predict.c tron.o linear.o linear_model_matlab.o ../blas/blas.a
 
-read_sparse.$(MEX_EXT):	read_sparse.c
-	$(MEX) $(MEX_OPTION) read_sparse.c
+libsvmread.$(MEX_EXT):	libsvmread.c
+	$(MEX) $(MEX_OPTION) libsvmread.c
+
+libsvmwrite.$(MEX_EXT):	libsvmwrite.c
+	$(MEX) $(MEX_OPTION) libsvmwrite.c
 
 linear_model_matlab.o: linear_model_matlab.c ../linear.h
 	$(CXX) $(CFLAGS) -c linear_model_matlab.c

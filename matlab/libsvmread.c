@@ -9,11 +9,13 @@
 #if MX_API_VER < 0x07030000
 typedef int mwIndex;
 #endif 
+#define max(x,y) (((x)>(y))?(x):(y))
+#define min(x,y) (((x)<(y))?(x):(y))
 
 void exit_with_help()
 {
 	mexPrintf(
-	"Usage: [label_vector, instance_matrix] = read_sparse(fname);\n"
+	"Usage: [label_vector, instance_matrix] = libsvmread('filename');\n"
 	);
 }
 
@@ -44,10 +46,10 @@ static char* readline(FILE *input)
 	return line;
 }
 
-// read in a problem (in svmlight format)
+// read in a problem (in libsvm format)
 void read_problem(const char *filename, mxArray *plhs[])
 {
-	int max_index, min_index, i;
+	int max_index, min_index, inst_max_index, i;
 	long elements, k;
 	FILE *fp = fopen(filename,"r");
 	int l = 0;
@@ -74,6 +76,7 @@ void read_problem(const char *filename, mxArray *plhs[])
 		// features
 		int index = 0;
 
+		inst_max_index = -1; // strtol gives 0 if wrong format, and precomputed kernel has <index> start from 0
 		strtok(line," \t"); // label
 		while (1)
 		{
@@ -84,19 +87,19 @@ void read_problem(const char *filename, mxArray *plhs[])
 
 			errno = 0;
 			index = (int) strtol(idx,&endptr,10);
-			if(endptr == idx || errno != 0 || *endptr != '\0' || index <= -1) // precomputed kernel has <index> start from 0
+			if(endptr == idx || errno != 0 || *endptr != '\0' || index <= inst_max_index)
 			{
 				mexPrintf("Wrong input format at line %d\n",l+1);
 				fake_answer(plhs);
 				return;
 			}
+			else
+				inst_max_index = index;
 
-			if(index < min_index)
-				min_index = index;
+			min_index = min(min_index, index);
 			elements++;
 		}
-		if(index > max_index)
-			max_index = index;
+		max_index = max(max_index, inst_max_index);
 		l++;
 	}
 	rewind(fp);
@@ -123,7 +126,7 @@ void read_problem(const char *filename, mxArray *plhs[])
 		readline(fp);
 
 		label = strtok(line," \t");
-		labels[i] = (int)strtol(label,&endptr,10);
+		labels[i] = strtod(label,&endptr);
 		if(endptr == label)
 		{
 			mexPrintf("Wrong input format at line %d\n",i+1);

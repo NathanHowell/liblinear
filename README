@@ -25,11 +25,21 @@ When to use LIBLINEAR but not LIBSVM
 ====================================
 
 There are some large data for which with/without nonlinear mappings
-gives similar performances.  Without using kernels, one can train a
-much larger set via a linear classifier.  These data usually have a
-large number of features. Document classification is an example.
+gives similar performances.  Without using kernels, one can
+efficiently train a much larger set via a linear classifier.  These
+data usually have a large number of features. Document classification
+is an example.
 
-For the software LIBSVM, please check
+Warning: While generally liblinear is very fast, its default solver
+may be slow under certain situations (e.g., data not scaled or C is
+large). See Appendix B of our SVM guide about how to handle such
+cases.
+http://www.csie.ntu.edu.tw/~cjlin/papers/guide/guide.pdf
+
+Warning: If you are a beginner and your data sets are not large, you
+should consider LIBSVM first.
+
+LIBSVM page:
 http://www.csie.ntu.edu.tw/~cjlin/libsvm
 
 
@@ -94,12 +104,14 @@ options:
 -e epsilon : set tolerance of termination criterion
         -s 0 and 2
                 |f'(w)|_2 <= eps*min(pos,neg)/l*|f'(w0)|_2,
-                where f is the primal function, (default 0.01)
+		where f is the primal function and pos/neg are # of
+		positive/negative data (default 0.01)
         -s 1, 3, and 4
                 Dual maximal violation <= eps; similar to libsvm (default 0.1)
 -B bias : if bias >= 0, instance x becomes [x; bias]; if < 0, no bias term added (default 1)
 -wi weight: weights adjust the parameter C of different classes (see README for details)
 -v n: n-fold cross validation mode
+-q : quiet mode (no outputs)
 
 Option -v randomly splits the data into n parts and calculates cross
 validation accuracy on them.
@@ -287,7 +299,39 @@ Library Usage
     *NOTE* To avoid wrong parameters, check_parameter() should be
     called before train().
 
-- Function: void cross_validation(const problem *prob, const parameter *param, int nr_fold, double *target);
+    struct model stores the model obtained from the training procedure:
+
+        struct model
+        {
+                struct parameter param;
+                int nr_class;           /* number of classes */
+                int nr_feature;
+                double *w;
+                int *label;             /* label of each class */
+                double bias;
+        };
+
+     param describes the parameters used to obtain the model.
+
+     nr_class and nr_feature are the number of classes and features, respectively.
+
+     The nr_feature*nr_class array w gives feature weights. We use one
+     against the rest for multi-class classification, so each feature
+     index corresponds to nr_class weight values. Weights are
+     organized in the following way
+
+     +------------------+------------------+------------+
+     | nr_class weights | nr_class weights |  ...   
+     | for 1st feature  | for 2nd feature  |      
+     +------------------+------------------+------------+
+
+     If bias >= 0, x becomes [x; bias]. The number of features is
+     increased by one, so w is a (nr_feature+1)*nr_class array. The
+     value of bias is stored in the variable bias.
+
+     The array label stores class labels.
+
+- Function: void cross_validation(const problem *prob, const parameter *param, int nr_fold, int *target);
 
     This function conducts cross validation. Data are separated to
     nr_fold folds. Under given parameters, sequentially each fold is
@@ -361,6 +405,11 @@ Library Usage
 
     This function frees the memory used by a parameter set.
 
+- Variable: extern void (*liblinear_print_string) (const char *);
+
+    Users can specify their output format by
+    liblinear_print_string = &your_print_function;
+
 Building Windows Binaries
 =========================
 
@@ -392,7 +441,7 @@ If you find LIBLINEAR helpful, please cite it as
 
 R.-E. Fan, K.-W. Chang, C.-J. Hsieh, X.-R. Wang, and C.-J. Lin.
 LIBLINEAR: A Library for Large Linear Classification, Journal of
-Machine Learning Research 9(2008), 1871-1874.Software available at
+Machine Learning Research 9(2008), 1871-1874. Software available at
 http://www.csie.ntu.edu.tw/~cjlin/liblinear
 
 For any questions and comments, please send your email to

@@ -16,17 +16,21 @@ typedef int mwIndex;
 #define Malloc(type,n) (type *)malloc((n)*sizeof(type))
 #define INF HUGE_VAL
 
+void print_null(const char *s){}
+
+void (*liblinear_default_print_string) (const char *);
+
 void exit_with_help()
 {
 	mexPrintf(
 	"Usage: model = train(training_label_vector, training_instance_matrix, 'liblinear_options', 'col');\n"
 	"liblinear_options:\n"
 	"-s type : set type of solver (default 1)\n"
-	"	0 -- L2 logistic regression\n"
+	"	0 -- L2-regularized logistic regression\n"
 	"	1 -- L2-loss support vector machines (dual)\n"	
 	"	2 -- L2-loss support vector machines (primal)\n"
 	"	3 -- L1-loss support vector machines (dual)\n"
-	"	4 -- multi-class support vector machines from Crammer and Singer\n"
+	"	4 -- multi-class support vector machines by Crammer and Singer\n"
 	"-c cost : set the parameter C (default 1)\n"
 	"-e epsilon : set tolerance of termination criterion\n"
 	"	-s 0 and 2\n" 
@@ -37,6 +41,7 @@ void exit_with_help()
 	"-B bias : if bias >= 0, instance x becomes [x; bias]; if < 0, no bias term added (default 1)\n"
 	"-wi weight: weights adjust the parameter C of different classes (see README for details)\n"
 	"-v n: n-fold cross validation mode\n"
+	"-q : quiet mode (no outputs)\n"
 	"col:\n"
 	"	if 'col' is setted, training_instance_matrix is parsed in column format, otherwise is in row format\n"
 	);
@@ -89,6 +94,12 @@ int parse_command_line(int nrhs, const mxArray *prhs[], char *model_file_name)
 	col_format_flag = 0;
 	bias = 1;
 
+	// train loaded only once under matlab
+	if(liblinear_default_print_string == NULL)
+		liblinear_default_print_string = liblinear_print_string;
+	else
+		liblinear_print_string = liblinear_default_print_string;
+
 	if(nrhs <= 1)
 		return 1;
 
@@ -112,7 +123,8 @@ int parse_command_line(int nrhs, const mxArray *prhs[], char *model_file_name)
 	for(i=1;i<argc;i++)
 	{
 		if(argv[i][0] != '-') break;
-		if(++i>=argc)
+		++i;
+		if(i>=argc && argv[i-1][1] != 'q') // since option -q has no parameter
 			return 1;
 		switch(argv[i-1][1])
 		{
@@ -143,6 +155,10 @@ int parse_command_line(int nrhs, const mxArray *prhs[], char *model_file_name)
 				param.weight = (double *) realloc(param.weight,sizeof(double)*param.nr_weight);
 				param.weight_label[param.nr_weight-1] = atoi(&argv[i-1][2]);
 				param.weight[param.nr_weight-1] = atof(argv[i]);
+				break;
+			case 'q':
+				liblinear_print_string = &print_null;
+				i--;
 				break;
 			default:
 				mexPrintf("unknown option\n");

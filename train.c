@@ -8,6 +8,8 @@
 #define Malloc(type,n) (type *)malloc((n)*sizeof(type))
 #define INF HUGE_VAL
 
+void print_null(const char *s) {}
+
 void exit_with_help()
 {
 	printf(
@@ -23,12 +25,14 @@ void exit_with_help()
 	"-e epsilon : set tolerance of termination criterion\n"
 	"	-s 0 and 2\n" 
 	"		|f'(w)|_2 <= eps*min(pos,neg)/l*|f'(w0)|_2,\n" 
-	"		where f is the primal function, (default 0.01)\n"
+	"		where f is the primal function and pos/neg are # of\n" 
+	"		positive/negative data (default 0.01)\n"
 	"	-s 1, 3, and 4\n"
 	"		Dual maximal violation <= eps; similar to libsvm (default 0.1)\n"
 	"-B bias : if bias >= 0, instance x becomes [x; bias]; if < 0, no bias term added (default 1)\n"
 	"-wi weight: weights adjust the parameter C of different classes (see README for details)\n"
 	"-v n: n-fold cross validation mode\n"
+	"-q : quiet mode (no outputs)\n"
 	);
 	exit(1);
 }
@@ -39,7 +43,7 @@ void exit_input_error(int line_num)
 	exit(1);
 }
 
-static char *line;
+static char *line = NULL;
 static int max_line_len;
 
 static char* readline(FILE *input)
@@ -102,6 +106,7 @@ int main(int argc, char **argv)
 	free(prob.y);
 	free(prob.x);
 	free(x_space);
+	free(line);
 
 	return 0;
 }
@@ -178,8 +183,13 @@ void parse_command_line(int argc, char **argv, char *input_file_name, char *mode
 				}
 				break;
 
+			case 'q':
+				liblinear_print_string = &print_null;
+				i--;
+				break;
+
 			default:
-				fprintf(stderr,"unknown option\n");
+				fprintf(stderr,"unknown option: -%c\n", argv[i-1][1]);
 				exit_with_help();
 				break;
 		}
@@ -215,8 +225,8 @@ void parse_command_line(int argc, char **argv, char *input_file_name, char *mode
 // read in a problem (in libsvm format)
 void read_problem(const char *filename)
 {
-	int max_index, i;
-	long elements, j;
+	int max_index, inst_max_index, i;
+	long int elements, j;
 	FILE *fp = fopen(filename,"r");
 	char *endptr;
 	char *idx, *val, *label;
@@ -239,7 +249,7 @@ void read_problem(const char *filename)
 		while(1)
 		{
 			p = strtok(NULL," \t");
-			if(p == NULL || *p == '\n')
+			if(p == NULL || *p == '\n') // check '\n' as ' ' may be after the last feature
 				break;
 			elements++;
 		}
@@ -258,6 +268,7 @@ void read_problem(const char *filename)
 	j=0;
 	for(i=0;i<prob.l;i++)
 	{
+		inst_max_index = 0; // strtol gives 0 if wrong format
 		readline(fp);
 		prob.x[i] = &x_space[j];
 		label = strtok(line," \t");
@@ -275,8 +286,10 @@ void read_problem(const char *filename)
 
 			errno = 0;
 			x_space[j].index = (int) strtol(idx,&endptr,10);
-			if(endptr == idx || errno != 0 || *endptr != '\0' || x_space[j].index <= 0)
+			if(endptr == idx || errno != 0 || *endptr != '\0' || x_space[j].index <= inst_max_index)
 				exit_input_error(i+1);
+			else
+				inst_max_index = x_space[j].index;
 
 			errno = 0;
 			x_space[j].value = strtod(val,&endptr);
@@ -286,8 +299,8 @@ void read_problem(const char *filename)
 			++j;
 		}
 
-		if(j >= 1 && x_space[j-1].index > max_index)
-			max_index = x_space[j-1].index;
+		if(inst_max_index > max_index)
+			max_index = inst_max_index;
 
 		if(prob.bias >= 0)
 			x_space[j++].value = prob.bias;

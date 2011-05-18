@@ -3,7 +3,7 @@
 
 double dnrm2_(int *n, double *x, int *incx)
 {
-  long ix, nn, iincx;
+  long int ix, nn, iincx;
   double norm, scale, absxi, ssq, temp;
 
 /*  DNRM2 returns the euclidean norm of a vector via the function   

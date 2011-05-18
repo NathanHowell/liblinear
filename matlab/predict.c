@@ -162,6 +162,7 @@ void do_predict(mxArray *plhs[], const mxArray *prhs[], struct model *model_, co
 			predict_values(model_, x, dec_values);
 			for(i=0;i<nr_w;i++)
 				ptr_dec_values[instance_index + i * testing_instance_number] = dec_values[i];
+			free(dec_values);
 		}
 
 		if(v == target)

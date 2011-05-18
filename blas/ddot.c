@@ -2,9 +2,9 @@
 
 double ddot_(int *n, double *sx, int *incx, double *sy, int *incy)
 {
-  long i, m, nn, iincx, iincy;
+  long int i, m, nn, iincx, iincy;
   double stemp;
-  long ix, iy;
+  long int ix, iy;
 
   /* forms the dot product of two vectors.   
      uses unrolled loops for increments equal to one.   
