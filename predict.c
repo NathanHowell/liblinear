@@ -30,19 +30,9 @@ void do_predict(FILE *input, FILE *output, struct model* model_)
 	{
 		int *labels;
 
-		if(model_->param.solver_type==L2LOSS_SVM)
+		if(model_->param.solver_type!=L2_LR)
 		{
-			fprintf(stderr, "probability output for L2LOSS_SVM is not supported yet\n");
-			return;
-		}
-		else if(model_->param.solver_type==L2LOSS_SVM_DUAL)
-		{
-			fprintf(stderr, "probability output for L2LOSS_SVM_DUAL is not supported yet\n");
-			return;
-		}
-		else if(model_->param.solver_type==L1LOSS_SVM_DUAL)
-		{
-			fprintf(stderr, "probability output for L1LOSS_SVM_DUAL is not supported yet\n");
+			fprintf(stderr, "probability output is only supported for logistic regression\n");
 			return;
 		}
 

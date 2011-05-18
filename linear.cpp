@@ -366,8 +366,8 @@ void l2loss_svm_fun::subXTv(double *v, double *XTv)
 	}
 }
 
-// A Coordinate descend algorithm for 
-// solving L1 loss and L2 loss SVM dual optimization problem
+// A coordinate descent algorithm for 
+// solving L1 loss and L2 loss SVM dual optimization problems
 // Solves:
 //
 //  min_\alpha  0.5(\alpha^T (Q + D)\alpha) - e^T \alpha,
@@ -466,7 +466,7 @@ static void solve_linear_c_svc(
 			}
 			G[i] = G[i]*yi-1;
 
-		    if(yi == 1)
+			if(yi == 1)
 			{
 				C = upper_bound_p; 
 				G[i] += alpha[i]/diag_p; 
@@ -517,8 +517,7 @@ static void solve_linear_c_svc(
 			for(int k = 0; k < active_size; k++)
 			{
 				i = index[k];
-				schar yi = y[i];
-				if(yi == 1) C = upper_bound_p; else C = upper_bound_n;
+				if(y[i] == 1) C = upper_bound_p; else C = upper_bound_n;
 
 				if(alpha[i] == 0 && G[i] > -100*eps)
 				{
@@ -540,26 +539,21 @@ static void solve_linear_c_svc(
 
 	// calculate objective value
 	
+	double v = 0;
 	for(int i=0; i<l; i++)
 	{
 		G[i] = 0;
 		schar yi = y[i];
 		feature_node *xi = prob->x[i];
-		while(xi->index!= -1)
+		while(xi->index != -1)
 		{
 			G[i] += w[xi->index-1]*(xi->value);
 			xi++;
 		}
-		G[i] = G[i]*yi-1;
-		if(solver_type == L1LOSS_SVM_DUAL)
-			if(yi == 1) C = Cp; else C = Cn;
-		else if(solver_type == L2LOSS_SVM_DUAL)
-			if(yi == 1) G[i] += alpha[i]/Cp/2; else G[i] += alpha[i]/Cn/2; // for L2-SVM
+		G[i] = G[i]*yi;
+		if(yi == 1) G[i] += alpha[i]/diag_p; else G[i] += alpha[i]/diag_n;
+		v += alpha[i] * (G[i]-2);
 	}
-
-	double v = 0;
-	for(i=0;i<l;i++)
-		v += alpha[i] * (G[i]-1);
 	info("Objective value = %lf\n",v/2);
 	
 	delete [] G;

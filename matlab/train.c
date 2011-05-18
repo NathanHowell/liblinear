@@ -89,8 +89,7 @@ int parse_command_line(int nrhs, const mxArray *prhs[], char *model_file_name)
 
 	if(nrhs <= 1)
 		return 1;
-	if(nrhs == 2)
-		return 0;
+
 	if(nrhs == 4)
 	{
 		mxGetString(prhs[3], cmd, mxGetN(prhs[3])+1);
@@ -99,11 +98,13 @@ int parse_command_line(int nrhs, const mxArray *prhs[], char *model_file_name)
 	}
 
 	// put options in argv[]
-	mxGetString(prhs[2], cmd,  mxGetN(prhs[2]) + 1);
-	if((argv[argc] = strtok(cmd, " ")) == NULL)
-		return 0;
-	while((argv[++argc] = strtok(NULL, " ")) != NULL)
-		;
+	if(nrhs > 2)
+	{
+		mxGetString(prhs[2], cmd,  mxGetN(prhs[2]) + 1);
+		if((argv[argc] = strtok(cmd, " ")) != NULL)
+			while((argv[++argc] = strtok(NULL, " ")) != NULL)
+				;
+	}
 
 	// parse options
 	for(i=1;i<argc;i++)
@@ -146,6 +147,7 @@ int parse_command_line(int nrhs, const mxArray *prhs[], char *model_file_name)
 				return 1;
 		}
 	}
+
 	if(param.eps == INF)
 	{
 		if(param.solver_type == L2_LR || param.solver_type == L2LOSS_SVM)
@@ -165,9 +167,13 @@ int read_problem_sparse(const mxArray *label_vec, const mxArray *instance_mat)
 {
 	int i, j, k, low, high;
 	mwIndex *ir, *jc;
-	int elements, max_index, num_samples;
+	int elements, max_index, num_samples, label_vector_row_num;
 	double *samples, *labels;
 	mxArray *instance_mat_col; // instance sparse matrix in column format
+
+	prob.x = NULL;
+	prob.y = NULL;
+	x_space = NULL;
 
 	if(col_format_flag)
 		instance_mat_col = (mxArray *)instance_mat;
@@ -185,6 +191,16 @@ int read_problem_sparse(const mxArray *label_vec, const mxArray *instance_mat)
 		mxDestroyArray(prhs[0]);
 	}
 
+	// the number of instance
+	prob.l = mxGetN(instance_mat_col);
+	label_vector_row_num = mxGetM(label_vec);
+
+	if(label_vector_row_num!=prob.l)
+	{
+		mexPrintf("Length of label vector does not match # of instances.\n");
+		return -1;
+	}
+	
 	// each column is one instance
 	labels = mxGetPr(label_vec);
 	samples = mxGetPr(instance_mat_col);
@@ -193,8 +209,6 @@ int read_problem_sparse(const mxArray *label_vec, const mxArray *instance_mat)
 
 	num_samples = mxGetNzmax(instance_mat_col);
 
-	// the number of instance
-	prob.l = mxGetN(instance_mat_col);
 	elements = num_samples + prob.l*2;
 	max_index = mxGetM(instance_mat_col);
 
@@ -245,9 +259,10 @@ void mexFunction( int nlhs, mxArray *plhs[],
 
 	col_format_flag = 0;
 
-	// Translate the input Matrix to the format such that train.exe can recognize it
+	// Transform the input Matrix to libsvm format
 	if(nrhs > 0 && nrhs < 5)
 	{
+		int err=0;
 		if(parse_command_line(nrhs, prhs, NULL))
 		{
 			exit_with_help();
@@ -257,14 +272,14 @@ void mexFunction( int nlhs, mxArray *plhs[],
 		}
 
 		if(mxIsSparse(prhs[1]))
-			read_problem_sparse(prhs[0], prhs[1]);
+			err = read_problem_sparse(prhs[0], prhs[1]);
 		else
 			mexPrintf("Training_instance_matrix must be sparse\n");
 
 		// train's original code
 		error_msg = check_parameter(&prob, &param);
 
-		if(error_msg)
+		if(err || error_msg)
 		{
 			if (error_msg != NULL)
 				mexPrintf("Error: %s\n", error_msg);
@@ -286,9 +301,9 @@ void mexFunction( int nlhs, mxArray *plhs[],
 		else
 		{
 			int nr_feat = mxGetM(prhs[1]);
+			const char *error_msg;
 			if(col_format_flag)
 				nr_feat = mxGetN(prhs[1]);
-			const char *error_msg;
 			model_ = train(&prob, &param);
 			error_msg = model_to_matlab_structure(plhs, nr_feat, model_);
 			if(error_msg)

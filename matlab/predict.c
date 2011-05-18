@@ -84,7 +84,7 @@ void do_predict(mxArray *plhs[], const mxArray *prhs[], struct model *model_, co
 
 	if(label_vector_row_num!=testing_instance_number)
 	{
-		mexPrintf("# of labels (# of rows in 1st argument) does not match # of instances (# of rows in 2nd argument).\n");
+		mexPrintf("Length of label vector does not match # of instances.\n");
 		fake_answer(plhs);
 		return;
 	}
@@ -216,7 +216,7 @@ void mexFunction( int nlhs, mxArray *plhs[],
 		const char *error_msg;
 
 		// parse options
-		if(nrhs==4)
+		if(nrhs>=4)
 		{
 			int i, argc = 1;
 			char *argv[CMD_LEN/2];
@@ -264,7 +264,7 @@ void mexFunction( int nlhs, mxArray *plhs[],
 		{
 			if(model_->param.solver_type!=L2_LR)
 			{
-				mexPrintf("probability output is only supported for L2_LR\n");
+				mexPrintf("probability output is only supported for logistic regression\n");
 				prob_estimate_flag=0;
 			}
 		}
